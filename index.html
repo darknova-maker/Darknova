@@ -194,12 +194,13 @@ function showChat() {
   $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("menu").hidden = false; $("tabs").style.display = "flex";
   loadChats();
   if (!chats.length) { try { const old = JSON.parse(localStorage.getItem("dn-history") || "[]"); if (old.length) chats.push({ id: newId(), title: "Chat anterior", ts: Date.now(), msgs: old }); } catch (e) {} }
+  let keep = false; try { keep = sessionStorage.getItem("dn-keep") === "1"; sessionStorage.removeItem("dn-keep"); } catch (e) {}
   let cid = ""; try { cid = localStorage.getItem("dn-cur") || ""; } catch (e) {}
-  const c = chats.find(x => x.id === cid) || chats[0];
+  const c = keep ? chats.find(x => x.id === cid) : null;
   if (c) { curId = c.id; history = c.msgs.slice(); } else { curId = newId(); history = []; }
   persist();
-  if (history.length && history[history.length - 1].role === "user") { const l = history.pop(); save(); q.value = l.content.replace(/^📷 /, ""); }
-  try { const d = localStorage.getItem("dn-draft"); if (d) { q.value = d; localStorage.removeItem("dn-draft"); } } catch (e) {}
+  if (keep && history.length && history[history.length - 1].role === "user") { const l = history.pop(); save(); q.value = l.content.replace(/^📷 /, ""); }
+  try { localStorage.removeItem("dn-draft"); } catch (e) {}
   renderChat();
   try { if (localStorage.getItem("dn-down") === "1") { localStorage.removeItem("dn-down"); setTimeout(() => flash("Tu móvil no aguantó el modelo grande, así que uso uno más ligero (menos listo). Activa el modo online en ☰ para mejores respuestas."), 900); } } catch (e) {}
   let pref = null; try { pref = localStorage.getItem("dn-online"); } catch (e) {}
@@ -214,6 +215,7 @@ function failReload() {
     localStorage.setItem("dn-fails", JSON.stringify(n));
     if (n.length >= 3) { localStorage.setItem("dn-mi", String(Math.min(mi + 1, MODELS.length - 1))); localStorage.setItem("dn-down", "1"); localStorage.setItem("dn-fails", "[]"); }
   } catch (e) {}
+  try { sessionStorage.setItem("dn-keep", "1"); } catch (e) {}
   setTimeout(() => location.reload(), 1500);
 }
 const startApp = async () => {
@@ -646,8 +648,8 @@ $("send").addEventListener("click", e => { if (busy && $("send").textContent.ind
 
 let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { genOff(); save(); hiddenAt = Date.now(); return; }
-  if (hiddenAt && Date.now() - hiddenAt > 20000 && !busy) { try { localStorage.setItem("dn-draft", q.value); } catch (e) {} location.reload(); }
+  if (document.hidden) { genOff(); save(); hiddenAt = Date.now(); q.value = ""; $("trin").value = ""; $("ncin").value = ""; return; }
+  if (hiddenAt && Date.now() - hiddenAt > 20000 && !busy) { location.reload(); }
 });
 q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
 </script>
