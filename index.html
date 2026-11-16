@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DarkNova AI">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0b24">
+<title>DarkNova AI</title>
+<style>
+:root{--bg:#0d0b24;--panel:#171438;--line:#2b2760;--text:#ece9ff;--mute:#8f8ac4;--nova:#ff5fa8;--glow:#7c5cff;--me:#2a2570}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(900px 500px at 50% -10%,#241a66 0,var(--bg) 60%);color:var(--text);font:16px/1.5 -apple-system,"SF Pro Text",system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.logo{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff 0,var(--nova) 30%,var(--glow) 65%,#1a1450 100%);box-shadow:0 0 22px var(--glow)}
+h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+header small{display:block;color:var(--mute);font-size:12px}
+header button{margin-left:auto}
+button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 14px}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--nova);outline-offset:2px}
+#chat{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.m{max-width:88%;padding:10px 14px;border-radius:18px;white-space:pre-wrap;word-wrap:break-word}
+.u{align-self:flex-end;background:var(--me);border-bottom-right-radius:6px}
+.a{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:6px}
+#setup{margin:auto;text-align:center;max-width:340px}
+#setup .logo{width:84px;height:84px;margin:0 auto 18px;box-shadow:0 0 50px var(--glow)}
+#setup h2{margin:0 0 8px;font-size:24px}
+#setup p{color:var(--mute);margin:0 0 20px}
+.go{background:linear-gradient(135deg,var(--glow),var(--nova));border:0;color:#fff;font-weight:600;padding:13px 26px;font-size:17px}
+#bar{height:6px;background:var(--panel);border-radius:6px;margin-top:18px;overflow:hidden;display:none}
+#bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--glow),var(--nova))}
+#st{color:var(--mute);font-size:13px;margin-top:10px;min-height:20px}
+form{display:none;gap:10px;padding:12px 14px;border-top:1px solid var(--line);background:rgba(13,11,36,.9)}
+textarea{flex:1;resize:none;max-height:140px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:10px 14px;font:inherit}
+form .go{padding:10px 18px;font-size:16px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"></div>
+  <div><h1>DarkNova AI</h1><small>Creada por Saúl Arce · funciona en tu iPhone</small></div>
+  <button id="clear" type="button" hidden>Nuevo chat</button>
+</header>
+
+<div id="chat">
+  <div id="setup">
+    <div class="logo"></div>
+    <h2>Soy DarkNova AI</h2>
+    <p>Fui creada por Saúl Arce. Descarga mi modelo una sola vez (≈700 MB, usa Wi-Fi) y luego funciono sin internet, sin límites y gratis.</p>
+    <button class="go" id="start" type="button">Descargar y empezar</button>
+    <div id="bar"><i></i></div>
+    <div id="st"></div>
+  </div>
+</div>
+
+<form id="f">
+  <textarea id="q" rows="1" placeholder="Escribe a DarkNova AI…"></textarea>
+  <button class="go" id="send" type="submit">Enviar</button>
+</form>
+
+<script type="module">
+import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+const MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. Responde siempre en el idioma del usuario, de forma clara y útil.";
+const $ = id => document.getElementById(id);
+const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
+let engine, history = [], busy = false;
+
+// Icono para la pantalla de inicio
+try {
+  const c = document.createElement("canvas"); c.width = c.height = 180;
+  const x = c.getContext("2d");
+  x.fillStyle = "#0d0b24"; x.fillRect(0, 0, 180, 180);
+  const g = x.createRadialGradient(70, 70, 4, 90, 90, 62);
+  g.addColorStop(0, "#fff"); g.addColorStop(.3, "#ff5fa8"); g.addColorStop(.7, "#7c5cff"); g.addColorStop(1, "#1a1450");
+  x.fillStyle = g; x.beginPath(); x.arc(90, 90, 62, 0, 7); x.fill();
+  const l = document.createElement("link"); l.rel = "apple-touch-icon"; l.href = c.toDataURL(); document.head.appendChild(l);
+} catch (e) {}
+
+function add(text, cls) {
+  const d = document.createElement("div"); d.className = "m " + cls; d.textContent = text;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
+}
+
+function showChat() {
+  $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false;
+  try { history = JSON.parse(localStorage.getItem("dn-history") || "[]"); } catch (e) { history = []; }
+  if (!history.length) add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a");
+  history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
+}
+
+$("start").onclick = async () => {
+  $("start").disabled = true; bar.style.display = "block";
+  if (!navigator.gpu) {
+    st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU) para ejecutar la IA.";
+    $("start").disabled = false; return;
+  }
+  try {
+    engine = await webllm.CreateMLCEngine(MODEL, {
+      initProgressCallback: p => { bar.firstElementChild.style.width = Math.round(p.progress * 100) + "%"; st.textContent = p.text; }
+    });
+    showChat();
+  } catch (e) {
+    st.textContent = "No se pudo cargar el modelo: " + (e.message || e);
+    $("start").disabled = false;
+  }
+};
+
+f.onsubmit = async e => {
+  e.preventDefault();
+  const t = q.value.trim(); if (!t || busy || !engine) return;
+  busy = true; q.value = ""; add(t, "u");
+  history.push({ role: "user", content: t });
+  const out = add("…", "a"); let acc = "";
+  try {
+    const s = await engine.chat.completions.create({
+      messages: [{ role: "system", content: SYSTEM }, ...history.slice(-20)], stream: true, temperature: 0.7
+    });
+    for await (const ch of s) {
+      acc += ch.choices[0]?.delta?.content || ""; out.textContent = acc; chat.scrollTop = chat.scrollHeight;
+    }
+    history.push({ role: "assistant", content: acc });
+    try { localStorage.setItem("dn-history", JSON.stringify(history)); } catch (e) {}
+  } catch (err) { out.textContent = "Error: " + (err.message || err); }
+  busy = false;
+};
+
+q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
+$("clear").onclick = () => { history = []; try { localStorage.removeItem("dn-history"); } catch (e) {} chat.innerHTML = ""; add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a"); };
+</script>
+</body>
+</html>
