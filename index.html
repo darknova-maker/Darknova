@@ -37,6 +37,7 @@ form{display:none;gap:10px;padding:12px 14px;border-top:1px solid var(--line);ba
 textarea{flex:1;resize:none;max-height:140px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:10px 14px;font:inherit}
 form .go{padding:10px 18px;font-size:16px}
 #note{display:none;padding:6px 14px;font-size:13px;color:var(--mute);align-items:center;gap:10px}#note img{height:38px;border-radius:8px}.m img{max-width:100%;border-radius:12px;display:block;margin-bottom:6px}#cam{padding:8px 12px;font-size:18px}
+#start{display:none!important}
 </style>
 </head>
 <body>
@@ -107,16 +108,18 @@ function showChat() {
   history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
 }
 
+let tries = 0;
+const retryLater = () => { if (++tries <= 3) setTimeout(startApp, 5000); else st.textContent += " Cierra la app y ábrela otra vez."; };
 const startApp = async () => {
   $("start").disabled = true; bar.style.display = "block";
   st.textContent = "Iniciando…";
   if (!location.protocol.startsWith("http")) {
     st.textContent = "Abre DarkNova desde su enlace de Netlify o GitHub en Safari, no desde el archivo suelto.";
-    $("start").disabled = false; $("start").style.display = ""; return;
+    return;
   }
   if (!navigator.gpu) {
     st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU). Activa WebGPU en Ajustes > Apps > Safari > Avanzado > Funciones.";
-    $("start").disabled = false; $("start").style.display = ""; return;
+    return;
   }
   try {
     st.textContent = "Cargando motor de IA…";
@@ -126,7 +129,7 @@ const startApp = async () => {
     showChat();
   } catch (e) {
     st.textContent = "No se pudo cargar el modelo: " + (e.message || e);
-    $("start").disabled = false; $("start").style.display = "";
+    retryLater();
   }
 };
 $("start").onclick = startApp;
