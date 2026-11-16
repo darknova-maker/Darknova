@@ -36,6 +36,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--nova);outlin
 form{display:none;gap:10px;padding:12px 14px;border-top:1px solid var(--line);background:rgba(13,11,36,.9)}
 textarea{flex:1;resize:none;max-height:140px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:10px 14px;font:inherit}
 form .go{padding:10px 18px;font-size:16px}
+#note{display:none;padding:6px 14px;font-size:13px;color:var(--mute);align-items:center;gap:10px}#note img{height:38px;border-radius:8px}.m img{max-width:100%;border-radius:12px;display:block;margin-bottom:6px}#cam{padding:8px 12px;font-size:18px}
 </style>
 </head>
 <body>
@@ -56,19 +57,30 @@ form .go{padding:10px 18px;font-size:16px}
   </div>
 </div>
 
+<div id="note"></div>
 <form id="f">
+  <button type="button" id="cam" aria-label="Enviar foto">📷</button><input type="file" id="file" accept="image/*" hidden>
   <textarea id="q" rows="1" placeholder="Escribe a DarkNova AI…"></textarea>
   <button class="go" id="send" type="submit">Enviar</button>
 </form>
 
 <script type="module">
-import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+const LIBS = ["https://esm.run/@mlc-ai/web-llm", "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm"];
+async function loadLib() {
+  let last;
+  for (const u of LIBS) { try { return await import(u); } catch (e) { last = e; } }
+  throw last;
+}
 
-const MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
-const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. Responde siempre en el idioma del usuario, de forma clara y útil.";
+const MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. Responde siempre en el idioma del usuario, de forma clara y útil. Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.";
 const $ = id => document.getElementById(id);
 const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
-let engine, history = [], busy = false;
+let engine, webllm, history = [], busy = false;
+const VISION = "Phi-3.5-vision-instruct-q4f32_1-MLC";
+let cur = MODEL;
+const mk = cb => webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 2048 });
+const save = () => { try { localStorage.setItem("dn-history", JSON.stringify(history.slice(-60))); } catch (e) {} };
 
 // Icono para la pantalla de inicio
 try {
@@ -81,8 +93,10 @@ try {
   const l = document.createElement("link"); l.rel = "apple-touch-icon"; l.href = c.toDataURL(); document.head.appendChild(l);
 } catch (e) {}
 
-function add(text, cls) {
-  const d = document.createElement("div"); d.className = "m " + cls; d.textContent = text;
+function add(text, cls, pic) {
+  const d = document.createElement("div"); d.className = "m " + cls;
+  if (pic) { const im = document.createElement("img"); im.src = pic; d.appendChild(im); }
+  d.appendChild(document.createTextNode(text));
   chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
 }
 
@@ -93,39 +107,103 @@ function showChat() {
   history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
 }
 
-$("start").onclick = async () => {
+const startApp = async () => {
   $("start").disabled = true; bar.style.display = "block";
+  st.textContent = "Iniciando…";
+  if (!location.protocol.startsWith("http")) {
+    st.textContent = "Abre DarkNova desde su enlace de Netlify o GitHub en Safari, no desde el archivo suelto.";
+    $("start").disabled = false; return;
+  }
   if (!navigator.gpu) {
-    st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU) para ejecutar la IA.";
+    st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU). Activa WebGPU en Ajustes > Apps > Safari > Avanzado > Funciones.";
     $("start").disabled = false; return;
   }
   try {
-    engine = await webllm.CreateMLCEngine(MODEL, {
-      initProgressCallback: p => { bar.firstElementChild.style.width = Math.round(p.progress * 100) + "%"; st.textContent = p.text; }
-    });
+    st.textContent = "Cargando motor de IA…";
+    webllm = await loadLib();
+    engine = await mk(p => { bar.firstElementChild.style.width = Math.round(p.progress * 100) + "%"; st.textContent = p.text; });
+    try { localStorage.setItem("dn-ready", "1"); } catch (e) {}
     showChat();
   } catch (e) {
     st.textContent = "No se pudo cargar el modelo: " + (e.message || e);
     $("start").disabled = false;
   }
 };
+$("start").onclick = startApp;
+try { if (localStorage.getItem("dn-ready")) startApp(); } catch (e) {}
+
+let img = null;
+const note = $("note");
+function preview() {
+  note.style.display = "flex"; note.innerHTML = "";
+  const im = document.createElement("img"); im.src = img;
+  const sp = document.createElement("span"); sp.textContent = "Foto lista";
+  const x = document.createElement("button"); x.type = "button"; x.textContent = "Quitar";
+  x.onclick = () => { img = null; note.style.display = "none"; };
+  note.append(im, sp, x);
+}
+function shrink(file) {
+  return new Promise((ok, no) => {
+    const u = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 672 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); ok(c.toDataURL("image/jpeg", .85));
+    };
+    im.onerror = no; im.src = u;
+  });
+}
+$("cam").onclick = () => { if (!busy && engine) $("file").click(); };
+$("file").onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ""; if (!file || busy) return;
+  try { img = await shrink(file); } catch (err) { note.style.display = "flex"; note.textContent = "No pude leer la foto."; return; }
+  if (cur === VISION) { preview(); return; }
+  if (!confirm("Para ver fotos, DarkNova descarga un modelo extra de unos 4 GB (solo la primera vez). Puede fallar en iPhones con poca memoria. ¿Continuar?")) { img = null; return; }
+  busy = true; note.style.display = "flex"; note.textContent = "Descargando modelo de fotos…";
+  try { await engine.unload(); } catch (e2) {}
+  try {
+    cur = VISION;
+    engine = await mk(p => { note.textContent = "Modelo de fotos: " + Math.round(p.progress * 100) + "%"; });
+    preview();
+  } catch (err) {
+    img = null; cur = MODEL;
+    note.textContent = "No se pudo cargar el modelo de fotos (poca memoria). Vuelvo al modo texto…";
+    try { engine = await mk(() => {}); note.textContent = "No se pudo cargar el modelo de fotos (poca memoria). Sigues en modo texto."; } catch (e3) { note.textContent = "Cierra la app y ábrela otra vez."; }
+  }
+  busy = false;
+};
 
 f.onsubmit = async e => {
   e.preventDefault();
-  const t = q.value.trim(); if (!t || busy || !engine) return;
-  busy = true; q.value = ""; add(t, "u");
-  history.push({ role: "user", content: t });
+  const t = q.value.trim(); if ((!t && !img) || busy || !engine) return;
+  busy = true; q.value = ""; const pic = img; img = null; note.style.display = "none";
+  const shown = t || "Mira esta foto";
+  add(shown, "u", pic);
+  history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
-  try {
-    const s = await engine.chat.completions.create({
-      messages: [{ role: "system", content: SYSTEM }, ...history.slice(-20)], stream: true, temperature: 0.7
-    });
+  const ask = async () => {
+    acc = "";
+    const msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+    if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM }, ...msgs], stream: true, temperature: 0.7, max_tokens: 400 });
     for await (const ch of s) {
       acc += ch.choices[0]?.delta?.content || ""; out.textContent = acc; chat.scrollTop = chat.scrollHeight;
     }
-    history.push({ role: "assistant", content: acc });
-    try { localStorage.setItem("dn-history", JSON.stringify(history)); } catch (e) {}
-  } catch (err) { out.textContent = "Error: " + (err.message || err); }
+  };
+  try {
+    try { await ask(); }
+    catch (e1) {
+      out.textContent = "Reiniciando el motor, un momento…";
+      try { await engine.unload(); } catch (e) {}
+      engine = await mk(() => {});
+      out.textContent = "…";
+      await ask();
+    }
+    history.push({ role: "assistant", content: acc }); save();
+  } catch (err) {
+    out.textContent = "No pude reiniciar el motor. Cierra la app del todo, ábrela otra vez y toca Descargar y empezar. (" + (err.message || err) + ")";
+  }
   busy = false;
 };
 
