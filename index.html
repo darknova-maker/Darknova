@@ -46,6 +46,13 @@ form .go{padding:10px 18px;font-size:16px}
 #tr textarea{flex:none;min-height:110px;resize:vertical}
 #trout{min-height:110px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;white-space:pre-wrap}
 #mic,#spk,#cam{padding:8px 10px;font-size:17px}#mic.on{background:linear-gradient(135deg,var(--glow),var(--nova));border:0}textarea{min-width:0}
+#tabs button{padding:8px 4px;font-size:14px}
+#nc{display:none;flex:1;flex-direction:column;gap:10px;padding:16px;overflow-y:auto}
+#nc textarea{flex:none;min-height:90px;resize:vertical}
+#ncchips{display:flex;flex-wrap:wrap;gap:6px}#ncchips button{font-size:13px;padding:6px 10px}
+#ncout{display:none;margin:0;max-height:260px;overflow:auto;background:#0a0820;border:1px solid var(--line);border-radius:12px;padding:10px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+#ncbtns{display:none;gap:8px}#ncbtns button{flex:1}
+#ncframe{display:none;width:100%;height:440px;border:1px solid var(--line);border-radius:12px;background:#fff;flex:none}
 </style>
 </head>
 <body>
@@ -54,7 +61,7 @@ form .go{padding:10px 18px;font-size:16px}
   <div><h1>DarkNova AI</h1><small>Creada por Saúl Arce · funciona en tu iPhone</small></div>
   <button id="clear" type="button" hidden>Nuevo chat</button>
 </header>
-<div id="tabs"><button type="button" id="tabc" class="on">💬 Chat</button><button type="button" id="tabt">🌐 Traductor</button></div>
+<div id="tabs"><button type="button" id="tabc" class="on">💬 Chat</button><button type="button" id="tabt">🌐 Traductor</button><button type="button" id="tabn">💻 Nova-Code</button></div>
 
 <div id="chat">
   <div id="setup">
@@ -75,6 +82,15 @@ form .go{padding:10px 18px;font-size:16px}
   <div id="trout" aria-live="polite"></div>
   <button id="trcopy" type="button">Copiar traducción</button>
 </div>
+<div id="nc">
+  <strong>💻 Nova-Code</strong>
+  <textarea id="ncin" placeholder="Dime qué juego o app quieres. Ej: un juego de la serpiente con puntuación"></textarea>
+  <div id="ncchips"><button type="button">Juego de la serpiente</button><button type="button">Calculadora</button><button type="button">Lista de tareas</button><button type="button">Juego de memoria con cartas</button></div>
+  <button class="go" id="ncgo" type="button">Crear código</button>
+  <pre id="ncout"></pre>
+  <div id="ncbtns"><button type="button" id="nccopy">Copiar código</button><button type="button" id="ncrun">▶ Probar</button></div>
+  <iframe id="ncframe" sandbox="allow-scripts" title="Vista previa"></iframe>
+</div>
 <div id="note"></div>
 <form id="f">
   <button type="button" id="cam" aria-label="Enviar foto">📷</button><input type="file" id="file" accept="image/*" hidden><button type="button" id="mic" aria-label="Hablar con DarkNova">🎤</button><button type="button" id="spk" aria-label="Leer respuestas en voz alta">🔇</button>
@@ -90,7 +106,7 @@ async function loadLib() {
   throw last;
 }
 
-const MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+const MODEL = (() => { try { return localStorage.getItem("dn-model"); } catch (e) { return null; } })() || "Llama-3.2-1B-Instruct-q4f32_1-MLC";
 const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Si no estás segura de algo, dilo en lugar de inventar. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve. Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.";
 const $ = id => document.getElementById(id);
 const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
@@ -122,12 +138,21 @@ function showChat() {
   $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("tabs").style.display = "flex";
   try { history = JSON.parse(localStorage.getItem("dn-history") || "[]"); } catch (e) { history = []; }
   if (history.length && history[history.length - 1].role === "user") { const l = history.pop(); save(); q.value = l.content.replace(/^📷 /, ""); }
+  try { const d = localStorage.getItem("dn-draft"); if (d) { q.value = d; localStorage.removeItem("dn-draft"); } } catch (e) {}
   if (!history.length) add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a");
   history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
 }
 
 let tries = 0;
 const retryLater = () => { if (++tries <= 3) setTimeout(startApp, 5000); else st.textContent += " Cierra la app y ábrela otra vez."; };
+function failReload() {
+  try {
+    const now = Date.now(), n = JSON.parse(localStorage.getItem("dn-fails") || "[]").filter(x => now - x < 180000); n.push(now);
+    localStorage.setItem("dn-fails", JSON.stringify(n));
+    if (n.length >= 3 && !localStorage.getItem("dn-model")) { localStorage.setItem("dn-model", "Qwen2.5-0.5B-Instruct-q4f32_1-MLC"); localStorage.setItem("dn-fails", "[]"); }
+  } catch (e) {}
+  setTimeout(() => location.reload(), 1500);
+}
 const startApp = async () => {
   $("start").disabled = true; bar.style.display = "block";
   st.textContent = "Iniciando…";
@@ -220,12 +245,12 @@ $("mic").onclick = () => {
 };
 
 function showTab(t) {
-  const tr = t === "t";
-  $("chat").style.display = tr ? "none" : "flex"; f.style.display = tr ? "none" : "flex";
-  $("tr").style.display = tr ? "flex" : "none"; if (tr) $("note").style.display = "none";
-  $("tabt").classList.toggle("on", tr); $("tabc").classList.toggle("on", !tr);
+  $("chat").style.display = t === "c" ? "flex" : "none"; f.style.display = t === "c" ? "flex" : "none";
+  $("tr").style.display = t === "t" ? "flex" : "none"; $("nc").style.display = t === "n" ? "flex" : "none";
+  if (t !== "c") $("note").style.display = "none";
+  $("tabc").classList.toggle("on", t === "c"); $("tabt").classList.toggle("on", t === "t"); $("tabn").classList.toggle("on", t === "n");
 }
-$("tabc").onclick = () => showTab("c"); $("tabt").onclick = () => showTab("t");
+$("tabc").onclick = () => showTab("c"); $("tabt").onclick = () => showTab("t"); $("tabn").onclick = () => showTab("n");
 $("trcopy").onclick = () => { try { navigator.clipboard.writeText($("trout").textContent); $("trcopy").textContent = "¡Copiado!"; setTimeout(() => $("trcopy").textContent = "Copiar traducción", 1500); } catch (e) {} };
 $("trgo").onclick = async () => {
   const t = $("trin").value.trim(); if (!t || busy || !engine) return;
@@ -235,7 +260,32 @@ $("trgo").onclick = async () => {
     let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
   };
   try { try { await go(); } catch (e1) { o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); } }
-  catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; setTimeout(() => location.reload(), 1500); }
+  catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
+  busy = false;
+};
+
+const CODE_SYS = "Eres Nova-Code, la programadora de DarkNova AI. Crea lo que pida el usuario (juego o app) como UN SOLO archivo HTML completo con CSS y JavaScript dentro, que funcione en un iPhone (táctil, pantalla pequeña, sin librerías ni imágenes externas). Responde SOLO con el código dentro de un bloque ```html, sin explicaciones. Mantén el código corto y sencillo, con comentarios breves en español.";
+let ncCode = "";
+document.querySelectorAll("#ncchips button").forEach(b => { b.onclick = () => { $("ncin").value = b.textContent; }; });
+$("nccopy").onclick = () => { try { navigator.clipboard.writeText(ncCode); $("nccopy").textContent = "¡Copiado!"; setTimeout(() => $("nccopy").textContent = "Copiar código", 1500); } catch (e) {} };
+$("ncrun").onclick = () => { const fr = $("ncframe"); fr.style.display = "block"; fr.srcdoc = ncCode; fr.scrollIntoView({ behavior: "smooth" }); };
+$("ncgo").onclick = async () => {
+  const t = $("ncin").value.trim(); if (!t || busy || !engine) return;
+  busy = true; ncCode = ""; const o = $("ncout"); o.style.display = "block"; o.textContent = "Creando código…";
+  $("ncbtns").style.display = "none"; $("ncframe").style.display = "none";
+  let acc = "", cut = false;
+  const go = async () => {
+    acc = ""; cut = false;
+    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.3, max_tokens: 1400 });
+    for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; if (ch.choices[0]?.finish_reason === "length") cut = true; o.textContent = acc; o.scrollTop = o.scrollHeight; }
+  };
+  try {
+    try { await go(); } catch (e1) { o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); }
+    const m = acc.match(/```(?:html)?\s*\n([\s\S]*?)(?:```|$)/);
+    ncCode = (m ? m[1] : acc).trim();
+    o.textContent = ncCode + (cut ? "\n\n<!-- El código se cortó por el límite del modelo. Pídeme algo más sencillo. -->" : "");
+    $("ncbtns").style.display = "flex";
+  } catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
   busy = false;
 };
 
@@ -283,11 +333,16 @@ f.onsubmit = async e => {
     history.push({ role: "assistant", content: acc }); save();
     if (speak) say(acc);
   } catch (err) {
-    out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; setTimeout(() => location.reload(), 1500);
+    out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; failReload();
   }
   busy = false;
 };
 
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > 20000 && !busy) { try { localStorage.setItem("dn-draft", q.value); } catch (e) {} location.reload(); }
+});
 q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
 $("clear").onclick = () => { history = []; try { localStorage.removeItem("dn-history"); } catch (e) {} chat.innerHTML = ""; add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a"); };
 </script>
