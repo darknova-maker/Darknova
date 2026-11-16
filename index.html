@@ -264,11 +264,19 @@ $("trgo").onclick = async () => {
   busy = false;
 };
 
-const CODE_SYS = "Eres Nova-Code, la programadora de DarkNova AI. Crea lo que pida el usuario (juego o app) como UN SOLO archivo HTML completo con CSS y JavaScript dentro, que funcione en un iPhone (táctil, pantalla pequeña, sin librerías ni imágenes externas). Responde SOLO con el código dentro de un bloque ```html, sin explicaciones. Mantén el código corto y sencillo, con comentarios breves en español.";
+const CODE_SYS = "Eres Nova-Code, la programadora de DarkNova AI. Crea lo que pida el usuario como UN SOLO archivo HTML con <style> y <script> dentro, para un iPhone (táctil, sin librerías ni imágenes externas). IMPORTANTE: el programa debe ser MUY corto y simple, máximo 50 líneas en total, sin comentarios, y debe terminar con <\/script></body></html>. Responde SOLO con el código en un bloque ```html, sin explicaciones.";
 let ncCode = "";
 document.querySelectorAll("#ncchips button").forEach(b => { b.onclick = () => { $("ncin").value = b.textContent; }; });
 $("nccopy").onclick = () => { try { navigator.clipboard.writeText(ncCode); $("nccopy").textContent = "¡Copiado!"; setTimeout(() => $("nccopy").textContent = "Copiar código", 1500); } catch (e) {} };
-$("ncrun").onclick = () => { const fr = $("ncframe"); fr.style.display = "block"; fr.srcdoc = ncCode; fr.scrollIntoView({ behavior: "smooth" }); };
+function closeCode(c) {
+  let o = c;
+  if ((o.match(/<script\b/gi) || []).length > (o.match(/<\/script>/gi) || []).length) o += "\n<\/script>";
+  if (!/<\/body>/i.test(o)) o += "\n</body>";
+  if (!/<\/html>/i.test(o)) o += "\n</html>";
+  return o;
+}
+const GUARD = '<script>window.onerror=function(m,s,l){var p=document.createElement("pre");p.style.cssText="color:#c00;font:12px monospace;white-space:pre-wrap;padding:8px";p.textContent="Error en el código: "+m+" (línea "+l+"). Prueba a pulsar Crear código otra vez o pide algo más sencillo.";document.body.appendChild(p)}<\/script>';
+$("ncrun").onclick = () => { const fr = $("ncframe"); fr.style.display = "block"; fr.srcdoc = GUARD + closeCode(ncCode); fr.scrollIntoView({ behavior: "smooth" }); };
 $("ncgo").onclick = async () => {
   const t = $("ncin").value.trim(); if (!t || busy || !engine) return;
   busy = true; ncCode = ""; const o = $("ncout"); o.style.display = "block"; o.textContent = "Creando código…";
@@ -276,7 +284,7 @@ $("ncgo").onclick = async () => {
   let acc = "", cut = false;
   const go = async () => {
     acc = ""; cut = false;
-    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.3, max_tokens: 1400 });
+    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 1600 });
     for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; if (ch.choices[0]?.finish_reason === "length") cut = true; o.textContent = acc; o.scrollTop = o.scrollHeight; }
   };
   try {
