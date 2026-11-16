@@ -141,13 +141,20 @@ try {
 const MODEL = MODELS[Math.min(mi, MODELS.length - 1)];
 const genOn = () => { try { localStorage.setItem("dn-gen", "1"); } catch (e) {} };
 const genOff = () => { try { localStorage.removeItem("dn-gen"); } catch (e) {} };
-const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Si no estás segura de algo, dilo en lugar de inventar. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve.";
+const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Antes de contestar, asegúrate de que tu respuesta tiene sentido y responde justo a lo que se pregunta. Nunca inventes datos, fechas ni nombres: si no estás segura, dilo. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve.";
 const $ = id => document.getElementById(id);
 const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
 let engine, webllm, history = [], busy = false;
 const VISION = "Phi-3.5-vision-instruct-q4f32_1-MLC";
 let cur = MODEL;
-const mk = cb => webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 2048 });
+const mk = async cb => { if (!webllm) webllm = await loadLib(); return webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 2048 }); };
+let loadingEng = null;
+async function ensureEngine(cb) {
+  if (engine) return engine;
+  if (!navigator.gpu) throw new Error("Sin conexión y este móvil no permite la IA local.");
+  if (!loadingEng) loadingEng = (async () => { genOn(); try { engine = await mk(cb || (() => {})); } finally { genOff(); loadingEng = null; } return engine; })();
+  return loadingEng;
+}
 let chats = [], curId = null;
 const loadChats = () => { try { chats = JSON.parse(localStorage.getItem("dn-chats") || "[]"); } catch (e) { chats = []; } };
 const persist = () => { try { localStorage.setItem("dn-chats", JSON.stringify(chats)); localStorage.setItem("dn-cur", curId || ""); } catch (e) {} };
@@ -225,6 +232,8 @@ const startApp = async () => {
     st.textContent = "Abre DarkNova desde su enlace de Netlify o GitHub en Safari, no desde el archivo suelto.";
     return;
   }
+  try { if (localStorage.getItem("dn-online") === null) setOnline(confirm("¿Activar el modo online?\n\nDarkNova será mucho más lista y rápida porque usa un servicio de IA gratuito en internet y no gasta la memoria de tu móvil, pero tus mensajes se envían a ese servicio. Si cancelas, todo se queda en tu móvil.\n\nPuedes cambiarlo en ☰.")); } catch (e) {}
+  if (online && navigator.onLine) { try { localStorage.setItem("dn-ready", "1"); } catch (e) {} genOff(); showChat(); return; }
   if (!navigator.gpu) {
     st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU). Activa WebGPU en Ajustes > Apps > Safari > Avanzado > Funciones.";
     return;
@@ -265,7 +274,7 @@ function shrink(file) {
     im.onerror = no; im.src = u;
   });
 }
-$("cam").onclick = () => { if (!busy && engine) $("file").click(); };
+$("cam").onclick = () => { if (!busy) $("file").click(); };
 $("file").onchange = async e => {
   const file = e.target.files[0]; e.target.value = ""; if (!file || busy) return;
   try { img = await shrink(file); } catch (err) { note.style.display = "flex"; note.textContent = "No pude leer la foto."; return; }
@@ -348,8 +357,18 @@ async function onlineChat(messages, max, models) {
   } catch (e) { last = e; }
   throw last || new Error("sin respuesta");
 }
+const getM = () => { try { return JSON.parse(localStorage.getItem("dn-mem") || "[]"); } catch (e) { return []; } };
+const putM = a => { try { localStorage.setItem("dn-mem", JSON.stringify(a.slice(-40))); } catch (e) {} paintL(); };
+function memCheck(t) {
+  let got = false;
+  const nm = t.match(/\b(?:me llamo|mi nombre es)\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,20})/i);
+  if (nm) { try { localStorage.setItem("dn-name", nm[1]); } catch (e) {} const u = document.getElementById("uname"); if (u) u.value = nm[1]; got = true; }
+  const m = t.match(/^(?:recuerda|acu[eé]rdate|apunta|guarda|ten en cuenta)(?:\s+que)?\s+(.{4,200})$/i);
+  if (m) { const L = getM().filter(x => x !== m[1].trim()); L.push(m[1].trim()); putM(L); got = true; }
+  return got;
+}
 const getL = () => { try { return JSON.parse(localStorage.getItem("dn-lessons") || "[]"); } catch (e) { return []; } };
-const paintL = () => { const b = document.getElementById("lrn"); if (b) b.textContent = "🧠 Lo que he aprendido (" + getL().length + ")"; };
+const paintL = () => { const b = document.getElementById("lrn"); if (b) b.textContent = "🧠 Lo que he aprendido (" + (getL().length + getM().length) + ")"; };
 const putL = a => { try { localStorage.setItem("dn-lessons", JSON.stringify(a.slice(-100))); } catch (e) {} paintL(); };
 const wordsOf = t => new Set(norm(t).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 3));
 function relevant(t) {
@@ -364,12 +383,13 @@ function learn(q, a) {
 }
 const lessonsText = t => { const r = relevant(t); return r.length ? "\n\nDatos corregidos por el usuario (son verdad; si vienen al caso, úsalos con tus propias palabras y sin decir que te corrigieron): " + r.map(x => "P: " + x.l.q + " R: " + x.l.a).join(" | ") : ""; };
 const CORR = /^(no[,.!]|no es |no era |te equivocas|estas equivocad|eso (es|esta) (mal|falso|incorrecto)|en realidad|la respuesta correcta|es incorrecto|se dice |se escribe )/;
+const CTXH = "\n\nInformación encontrada en internet (puede no ser relevante; si responde a la pregunta, básate en ella; si no basta, di que no lo sabes y no inventes):\n";
 const CORRHINT = "\n\nEl usuario te está corrigiendo. Reconoce el error con una frase breve y amable, sin copiar su mensaje, y vuelve a responder la pregunta anterior de forma correcta, con tus propias palabras, usando la corrección.";
 const LEN = { b: "Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.", n: "Responde con claridad en 3 a 6 frases.", d: "Da respuestas completas y detalladas, con pasos o listas cuando ayuden." };
 function sysExtra() {
   let nm = "", ln = "b"; try { nm = localStorage.getItem("dn-name") || ""; ln = localStorage.getItem("dn-len") || "b"; } catch (e) {}
   const now = new Date().toLocaleString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  return " " + (LEN[ln] || LEN.b) + " Hoy es " + now + "." + (nm ? " El usuario se llama " + nm + "; llámale por su nombre de vez en cuando." : "");
+  return " " + (LEN[ln] || LEN.b) + " Hoy es " + now + "." + (nm ? " El usuario se llama " + nm + "; llámale por su nombre de vez en cuando." : "") + (getM().length ? " Cosas que recuerdas del usuario: " + getM().join("; ") + "." : "");
 }
 let curCtrl = null, stopped = false;
 function stopGen() { stopped = true; try { engine.interruptGenerate(); } catch (e) {} try { if (curCtrl) curCtrl.abort(); } catch (e) {} }
@@ -476,7 +496,7 @@ let ncRun = false, trRun = false;
 const isGpuErr = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
 $("ncgo").onclick = async () => {
   if (ncRun) { stopGen(); return; }
-  const t = $("ncin").value.trim(); if (!t || busy || !engine) return;
+  const t = $("ncin").value.trim(); if (!t || busy || (!engine && !ONL())) return;
   const key = pick(t);
   if (key) {
     ncCode = TPL[key](); const o2 = $("ncout"); o2.style.display = "block"; o2.textContent = ncCode;
@@ -489,6 +509,7 @@ $("ncgo").onclick = async () => {
   const go = async () => {
     acc = ""; cut = false;
     if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { if (stopped) return; o.textContent = "El modo online falló (" + String((eo && eo.message) || eo).slice(0, 60) + "). Uso el modo local…"; } }
+    await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 1600, frequency_penalty: 0.5, stop: ["</html>"] });
     for await (const ch of r) {
       acc += ch.choices[0]?.delta?.content || ""; if (ch.choices[0]?.finish_reason === "length") cut = true;
@@ -514,11 +535,12 @@ $("ncgo").onclick = async () => {
 };
 $("trgo").onclick = async () => {
   if (trRun) { stopGen(); return; }
-  const t = $("trin").value.trim(); if (!t || busy || !engine) return;
+  const t = $("trin").value.trim(); if (!t || busy || (!engine && !ONL())) return;
   busy = true; trRun = true; stopped = false; genOn(); $("trgo").textContent = "■ Cancelar"; const o = $("trout"); o.textContent = "…";
   const sysT = "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada.";
   const go = async () => {
     if (ONL()) { try { o.textContent = await onlineChat([{ role: "system", content: sysT }, { role: "user", content: t }], 700, ["openai"]); return; } catch (eo) { if (stopped) return; } }
+    await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: sysT }, { role: "user", content: t }], stream: true, temperature: 0.1, max_tokens: 700 });
     let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
   };
@@ -531,26 +553,53 @@ $("trgo").onclick = async () => {
   busy = false; trRun = false; genOff(); $("trgo").textContent = "Traducir";
 };
 
-async function lookup(t) {
-  if (!navigator.onLine || t.length < 8) return "";
-  if (/traduc|c[oó]mo se dice|how do you say/i.test(t)) return "";
-  if (!/[?¿]|^(qu[eé]|qui[eé]n|cu[aá]l|cu[aá]ndo|d[oó]nde|c[oó]mo|cu[aá]nt)/i.test(t)) return "";
-  const term = t.replace(/[¿?¡!]/g, "").replace(/^(qu[eé]|qui[eé]nes?|cu[aá]les?|cu[aá]ndo|d[oó]nde|c[oó]mo|cu[aá]nt[oa]s?)\s+(es|son|fue|fueron|era|significa|est[aá]|hay)?\s*(un[ao]?s?|el|la|los|las)?\s*/i, "").trim();
-  try {
-    const ctrl = new AbortController(), id = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch("https://es.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&prop=extracts&exintro=1&explaintext=1&exchars=800&gsrsearch=" + encodeURIComponent(term), { signal: ctrl.signal });
-    clearTimeout(id);
-    const j = await r.json(), p = Object.values(j.query?.pages || {})[0];
-    return p ? p.title + ": " + p.extract : "";
-  } catch (e) { return ""; }
+let lastSrc = [];
+const STOP = new Set("que cual cuales quien quienes como cuando donde cuanto cuanta cuantos cuantas porque para por con sin sobre entre desde hasta esta este esto estos estas ese esa eso son fue era hay tiene tienen puede pueden dime dame explica explicame busca buscame buscar informacion acerca favor puedes quiero saber algo todo cosas hacer una unos unas del los las pero tambien muy mas menos hola gracias".split(" "));
+const topicOf = t => norm(t).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2 && !STOP.has(w)).slice(0, 7).join(" ");
+async function wiki(lang, q, n, sig) {
+  const r = await fetch("https://" + lang + ".wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=" + n + "&prop=extracts&exintro=1&explaintext=1&exchars=700&gsrsearch=" + encodeURIComponent(q), { signal: sig });
+  const j = await r.json();
+  return Object.values((j.query && j.query.pages) || {}).sort((a, b) => a.index - b.index).filter(p => p.extract).map(p => ({ src: "Wikipedia " + lang.toUpperCase(), txt: "[" + p.title + "] " + p.extract }));
+}
+async function ddg(q, sig) {
+  const r = await fetch("https://api.duckduckgo.com/?q=" + encodeURIComponent(q) + "&format=json&no_html=1&skip_disambig=1", { signal: sig });
+  const j = await r.json(); const t = j.Answer || j.AbstractText || j.Definition;
+  return t ? [{ src: "DuckDuckGo", txt: String(t).slice(0, 600) }] : [];
+}
+const WCODE = c => c === 0 ? "despejado" : c <= 3 ? "parcialmente nublado" : c <= 48 ? "niebla" : c <= 67 ? "lluvia" : c <= 77 ? "nieve" : c <= 82 ? "chubascos" : "tormenta";
+async function weather(t, sig) {
+  const m = norm(t).match(/\b(?:en|de|para)\s+([a-z ]{3,30})/); if (!m) return [];
+  const city = m[1].replace(/\b(hoy|manana|ahora|esta semana|este fin de semana)\b.*$/, "").trim(); if (!city) return [];
+  const g = await (await fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=es&name=" + encodeURIComponent(city), { signal: sig })).json();
+  const p = g.results && g.results[0]; if (!p) return [];
+  const w = await (await fetch("https://api.open-meteo.com/v1/forecast?latitude=" + p.latitude + "&longitude=" + p.longitude + "&current=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=3", { signal: sig })).json();
+  const c = w.current, d = w.daily; if (!c) return [];
+  return [{ src: "Open-Meteo", txt: "Tiempo en " + p.name + " ahora: " + c.temperature_2m + "°C (sensación " + c.apparent_temperature + "°C), " + WCODE(c.weather_code) + ", viento " + c.wind_speed_10m + " km/h. Próximos 3 días, máx/mín: " + d.temperature_2m_max.map((x, i) => x + "/" + d.temperature_2m_min[i] + "°C (lluvia " + d.precipitation_probability_max[i] + "%)").join(", ") + "." }];
+}
+async function lookup(t, status) {
+  lastSrc = [];
+  const n = norm(t);
+  if (!navigator.onLine || t.length < 12) return "";
+  if (/traduc|como se dice|how do you say/.test(n)) return "";
+  if (!/\?|^(que|quien|quienes|cual|cuales|cuando|donde|como|cuanto|cuanta|cuantos|por que)\b|\b(busca|buscame|dime|explica|explicame|informacion|significa|definicion|clima|tiempo en|temperatura|noticias)\b/.test(n)) return "";
+  const q = topicOf(t); if (q.length < 4) return "";
+  if (status) status("🔎 Buscando información…");
+  const ctrl = new AbortController(), id = setTimeout(() => ctrl.abort(), 5000), sig = ctrl.signal;
+  const jobs = [wiki("es", q, 2, sig), wiki("en", q, 1, sig), ddg(q, sig)];
+  if (/clima|tiempo|temperatura|llover|lluvia|pronostico/.test(n)) jobs.unshift(weather(t, sig));
+  const res = await Promise.allSettled(jobs); clearTimeout(id);
+  const items = res.filter(r => r.status === "fulfilled").flatMap(r => r.value).slice(0, 5);
+  lastSrc = [...new Set(items.map(i => i.src))];
+  return items.map(i => "(" + i.src + ") " + i.txt).join("\n");
 }
 
 f.onsubmit = async e => {
   e.preventDefault();
-  const t = q.value.trim(); if ((!t && !img) || busy || !engine) return;
+  const t = q.value.trim(); if ((!t && !img) || busy || (!engine && !ONL())) return;
   busy = true; stopped = false; genOn(); $("send").textContent = "■ Parar"; q.value = ""; const pic = img; img = null; note.style.display = "none";
   const shown = t || "Mira esta foto";
   add(shown, "u", pic);
+  if (memCheck(shown)) flash("🧠 Lo recordaré.");
   let corrNow = false;
   if (CORR.test(norm(shown)) && history.length && history[history.length - 1].role === "assistant") {
     corrNow = true;
@@ -559,7 +608,7 @@ f.onsubmit = async e => {
   }
   history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
-  const ctx = pic ? "" : await lookup(t);
+  const ctx = pic ? "" : await lookup(t, m => { out.textContent = m; });
   const isGpu = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
   const ask = async lite => {
     acc = "";
@@ -569,11 +618,12 @@ f.onsubmit = async e => {
     for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
     msgs = keep;
     if (ONL() && !pic && !lite) {
-      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? CORRHINT : "") + (ctx ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx.slice(0, 600) : "") }, ...msgs]); md(out, acc); return; }
+      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? CORRHINT : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs]); md(out, acc); return; }
       catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } out.textContent = "El modo online falló (" + String((eo && eo.message) || eo).slice(0, 60) + "). Uso el modo local…"; }
     }
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
-    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? CORRHINT : "") + (ctx && !lite ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx.slice(0, 600) : "") }, ...msgs], stream: true, temperature: 0.4, max_tokens: 400 });
+    await ensureEngine(p => { out.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? CORRHINT : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400 });
     for await (const ch of s) {
       acc += ch.choices[0]?.delta?.content || ""; md(out, acc); chat.scrollTop = chat.scrollHeight;
     }
@@ -592,10 +642,11 @@ f.onsubmit = async e => {
     if (!acc.trim()) { acc = stopped ? "⏹ Detenido." : SORRY; md(out, acc); }
     history.push({ role: "assistant", content: acc }); save();
     out.dataset.q = shown; addActions(out, true);
+    if (lastSrc.length && out.nextSibling) { const sp = document.createElement("small"); sp.textContent = "🔎 " + lastSrc.join(" · "); out.nextSibling.appendChild(sp); }
     if (speak) say(acc);
   } catch (err) {
     if (isGpu(err)) { out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; failReload(); }
-    else { out.textContent = SORRY; history.push({ role: "assistant", content: SORRY }); save(); }
+    else { const M = /IA local/.test(String(err && err.message)) ? err.message : SORRY; out.textContent = M; history.push({ role: "assistant", content: M }); save(); }
   }
   busy = false; genOff(); $("send").textContent = "Enviar";
 };
@@ -638,8 +689,8 @@ $("dsearch").oninput = drawList; $("dnew").onclick = newChat; $("clear").onclick
 window.addEventListener("pagehide", save);
 paintL();
 $("lrn").onclick = () => {
-  const L = getL(); if (!L.length) { alert("Aún no he aprendido nada. Toca ✏️ Corregir en una respuesta, o dime \"No, la respuesta correcta es…\"."); return; }
-  if (confirm("Tengo " + L.length + " correcciones guardadas, por ejemplo:\n\n" + L.slice(-3).map(l => "• " + l.q + " → " + l.a).join("\n") + "\n\n¿Quieres borrarlas todas?")) putL([]);
+  const L = getL(), M = getM(); if (!L.length && !M.length) { alert("Aún no he aprendido nada. Dime «Recuerda que…», toca ✏️ Corregir en una respuesta, o corrígeme escribiendo «No, es…»."); return; }
+  if (confirm("Recuerdo " + M.length + " datos tuyos y " + L.length + " correcciones.\n\n" + M.slice(-3).map(x => "• " + x).join("\n") + (L.length ? "\n" + L.slice(-3).map(l => "• " + l.q + " → " + l.a).join("\n") : "") + "\n\n¿Quieres borrarlo todo?")) { putL([]); putM([]); }
 };
 try { $("uname").value = localStorage.getItem("dn-name") || ""; $("ulen").value = localStorage.getItem("dn-len") || "b"; } catch (e) {}
 $("uname").oninput = () => { try { localStorage.setItem("dn-name", $("uname").value.trim()); } catch (e) {} };
@@ -649,7 +700,12 @@ $("send").addEventListener("click", e => { if (busy && $("send").textContent.ind
 let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { genOff(); save(); hiddenAt = Date.now(); q.value = ""; $("trin").value = ""; $("ncin").value = ""; return; }
-  if (hiddenAt && Date.now() - hiddenAt > 20000 && !busy) { location.reload(); }
+  if (engine && hiddenAt && Date.now() - hiddenAt > 20000 && !busy) {
+    busy = true;
+    engine.chat.completions.create({ messages: [{ role: "user", content: "hola" }], max_tokens: 1 })
+      .then(() => { busy = false; })
+      .catch(e => { busy = false; if (isGpuErr(e)) { try { sessionStorage.setItem("dn-keep", "1"); } catch (x) {} location.reload(); } });
+  }
 });
 q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
 </script>
