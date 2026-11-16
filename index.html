@@ -73,8 +73,8 @@ async function loadLib() {
   throw last;
 }
 
-const MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
-const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. Responde siempre en el idioma del usuario, de forma clara y útil. Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.";
+const MODEL = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
+const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Si no estás segura de algo, dilo en lugar de inventar. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve. Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.";
 const $ = id => document.getElementById(id);
 const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
 let engine, webllm, history = [], busy = false;
@@ -177,6 +177,20 @@ $("file").onchange = async e => {
   busy = false;
 };
 
+async function lookup(t) {
+  if (!navigator.onLine || t.length < 8) return "";
+  if (/traduc|c[oó]mo se dice|how do you say/i.test(t)) return "";
+  if (!/[?¿]|^(qu[eé]|qui[eé]n|cu[aá]l|cu[aá]ndo|d[oó]nde|c[oó]mo|cu[aá]nt)/i.test(t)) return "";
+  const term = t.replace(/[¿?¡!]/g, "").replace(/^(qu[eé]|qui[eé]nes?|cu[aá]les?|cu[aá]ndo|d[oó]nde|c[oó]mo|cu[aá]nt[oa]s?)\s+(es|son|fue|fueron|era|significa|est[aá]|hay)?\s*(un[ao]?s?|el|la|los|las)?\s*/i, "").trim();
+  try {
+    const ctrl = new AbortController(), id = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch("https://es.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&prop=extracts&exintro=1&explaintext=1&exchars=800&gsrsearch=" + encodeURIComponent(term), { signal: ctrl.signal });
+    clearTimeout(id);
+    const j = await r.json(), p = Object.values(j.query?.pages || {})[0];
+    return p ? p.title + ": " + p.extract : "";
+  } catch (e) { return ""; }
+}
+
 f.onsubmit = async e => {
   e.preventDefault();
   const t = q.value.trim(); if ((!t && !img) || busy || !engine) return;
@@ -185,11 +199,12 @@ f.onsubmit = async e => {
   add(shown, "u", pic);
   history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
+  const ctx = pic ? "" : await lookup(t);
   const ask = async () => {
     acc = "";
     const msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
-    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM }, ...msgs], stream: true, temperature: 0.7, max_tokens: 400 });
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + (ctx ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx : "") }, ...msgs], stream: true, temperature: 0.4, max_tokens: 400 });
     for await (const ch of s) {
       acc += ch.choices[0]?.delta?.content || ""; out.textContent = acc; chat.scrollTop = chat.scrollHeight;
     }
