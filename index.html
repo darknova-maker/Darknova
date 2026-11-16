@@ -53,10 +53,19 @@ form .go{padding:10px 18px;font-size:16px}
 #ncout{display:none;margin:0;max-height:260px;overflow:auto;background:#0a0820;border:1px solid var(--line);border-radius:12px;padding:10px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
 #ncbtns{display:none;gap:8px}#ncbtns button{flex:1}
 #ncframe{display:none;width:100%;height:440px;border:1px solid var(--line);border-radius:12px;background:#fff;flex:none}
+#menu{margin-left:0!important;padding:8px 12px;font-size:20px}
+#drawer{display:none;position:fixed;inset:0;z-index:50}#dback{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+#dside{position:absolute;left:0;top:0;bottom:0;width:84%;max-width:340px;background:var(--panel);border-right:1px solid var(--line);padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+#dside .dh{display:flex;align-items:center;justify-content:space-between}
+#dsearch{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+#dlist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;color:var(--mute)}
+.ci{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;color:var(--text)}
+.ci.on{border-color:var(--nova)}.ci span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.ci small{color:var(--mute)}.ci button{padding:2px 8px}
 </style>
 </head>
 <body>
 <header>
+  <button id="menu" type="button" hidden aria-label="Mis chats">☰</button>
   <div class="logo"></div>
   <div><h1>DarkNova AI</h1><small>Creada por Saúl Arce · funciona en tu iPhone</small></div>
   <button id="clear" type="button" hidden>Nuevo chat</button>
@@ -98,6 +107,12 @@ form .go{padding:10px 18px;font-size:16px}
   <button class="go" id="send" type="submit">Enviar</button>
 </form>
 
+<div id="drawer"><div id="dback"></div><aside id="dside">
+  <div class="dh"><strong>Mis chats</strong><button id="dclose" type="button" aria-label="Cerrar">✕</button></div>
+  <input id="dsearch" type="search" placeholder="Buscar chats…">
+  <button class="go" id="dnew" type="button">+ Nuevo chat</button>
+  <div id="dlist"></div>
+</aside></div>
 <script type="module">
 const LIBS = ["https://esm.run/@mlc-ai/web-llm", "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm"];
 async function loadLib() {
@@ -114,7 +129,18 @@ let engine, webllm, history = [], busy = false;
 const VISION = "Phi-3.5-vision-instruct-q4f32_1-MLC";
 let cur = MODEL;
 const mk = cb => webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 2048 });
-const save = () => { try { localStorage.setItem("dn-history", JSON.stringify(history.slice(-60))); } catch (e) {} };
+let chats = [], curId = null;
+const loadChats = () => { try { chats = JSON.parse(localStorage.getItem("dn-chats") || "[]"); } catch (e) { chats = []; } };
+const persist = () => { try { localStorage.setItem("dn-chats", JSON.stringify(chats)); localStorage.setItem("dn-cur", curId || ""); } catch (e) {} };
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const save = () => {
+  if (!curId || !history.length) return;
+  let c = chats.find(x => x.id === curId);
+  if (!c) { c = { id: curId, title: "Chat nuevo", ts: Date.now(), msgs: [] }; chats.unshift(c); }
+  c.msgs = history.slice(-60); c.ts = Date.now();
+  const u = c.msgs.find(m => m.role === "user"); if (u) c.title = u.content.replace(/^📷 /, "").slice(0, 40);
+  persist();
+};
 
 // Icono para la pantalla de inicio
 try {
@@ -134,13 +160,23 @@ function add(text, cls, pic) {
   chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
 }
 
+const GREET = "Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?";
+function renderChat() {
+  chat.innerHTML = "";
+  if (!history.length) add(GREET, "a");
+  history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
+}
 function showChat() {
-  $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("tabs").style.display = "flex";
-  try { history = JSON.parse(localStorage.getItem("dn-history") || "[]"); } catch (e) { history = []; }
+  $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("menu").hidden = false; $("tabs").style.display = "flex";
+  loadChats();
+  if (!chats.length) { try { const old = JSON.parse(localStorage.getItem("dn-history") || "[]"); if (old.length) chats.push({ id: newId(), title: "Chat anterior", ts: Date.now(), msgs: old }); } catch (e) {} }
+  let cid = ""; try { cid = localStorage.getItem("dn-cur") || ""; } catch (e) {}
+  const c = chats.find(x => x.id === cid) || chats[0];
+  if (c) { curId = c.id; history = c.msgs.slice(); } else { curId = newId(); history = []; }
+  persist();
   if (history.length && history[history.length - 1].role === "user") { const l = history.pop(); save(); q.value = l.content.replace(/^📷 /, ""); }
   try { const d = localStorage.getItem("dn-draft"); if (d) { q.value = d; localStorage.removeItem("dn-draft"); } } catch (e) {}
-  if (!history.length) add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a");
-  history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
+  renderChat();
 }
 
 let tries = 0;
@@ -346,13 +382,44 @@ f.onsubmit = async e => {
   busy = false;
 };
 
+const drawer = $("drawer");
+const closeDrawer = () => { drawer.style.display = "none"; };
+function fmt(ts) { const d = new Date(ts); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("es", { day: "numeric", month: "short" }); }
+function drawList() {
+  const k = $("dsearch").value.trim().toLowerCase(), box = $("dlist"); box.innerHTML = "";
+  const list = chats.filter(c => !k || c.title.toLowerCase().includes(k) || c.msgs.some(m => m.content.toLowerCase().includes(k))).sort((a, b) => b.ts - a.ts);
+  if (!list.length) { box.textContent = k ? "No hay chats con eso." : "Aún no tienes chats guardados."; return; }
+  list.forEach(c => {
+    const row = document.createElement("div"); row.className = "ci" + (c.id === curId ? " on" : "");
+    const t = document.createElement("span"); t.textContent = c.title;
+    const d = document.createElement("small"); d.textContent = fmt(c.ts);
+    const x = document.createElement("button"); x.type = "button"; x.textContent = "🗑"; x.setAttribute("aria-label", "Borrar chat");
+    row.onclick = () => openChat(c.id);
+    x.onclick = e => { e.stopPropagation(); if (busy || !confirm("¿Borrar este chat?")) return; chats = chats.filter(y => y.id !== c.id); if (c.id === curId) { curId = newId(); history = []; renderChat(); } persist(); drawList(); };
+    row.append(t, d, x); box.appendChild(row);
+  });
+}
+function openChat(id) {
+  if (busy) return; save();
+  const c = chats.find(x => x.id === id); if (!c) return;
+  curId = id; history = c.msgs.slice(); persist(); renderChat(); showTab("c"); closeDrawer(); q.value = "";
+}
+function newChat() {
+  if (busy) return; save();
+  if (history.length) { curId = newId(); history = []; persist(); }
+  renderChat(); showTab("c"); closeDrawer(); q.value = "";
+}
+$("menu").onclick = () => { save(); drawer.style.display = "block"; $("dsearch").value = ""; drawList(); };
+$("dclose").onclick = closeDrawer; $("dback").onclick = closeDrawer;
+$("dsearch").oninput = drawList; $("dnew").onclick = newChat; $("clear").onclick = newChat;
+window.addEventListener("pagehide", save);
+
 let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (document.hidden) { save(); hiddenAt = Date.now(); return; }
   if (hiddenAt && Date.now() - hiddenAt > 20000 && !busy) { try { localStorage.setItem("dn-draft", q.value); } catch (e) {} location.reload(); }
 });
 q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
-$("clear").onclick = () => { history = []; try { localStorage.removeItem("dn-history"); } catch (e) {} chat.innerHTML = ""; add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a"); };
 </script>
 </body>
 </html>
