@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DarkNova AI">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0b24">
+<title>DarkNova AI</title>
+<style>
+:root{--bg:#0d0b24;--panel:#171438;--line:#2b2760;--text:#ece9ff;--mute:#8f8ac4;--nova:#ff5fa8;--glow:#7c5cff;--me:#2a2570}
+*{box-sizing:border-box}
+html{background:#0d0b24;height:100%}
+body{margin:0;height:100%}
+body{background:radial-gradient(900px 500px at 50% -10%,#241a66 0,var(--bg) 60%);color:var(--text);font:16px/1.5 -apple-system,"SF Pro Text",system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.logo{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff 0,var(--nova) 30%,var(--glow) 65%,#1a1450 100%);box-shadow:0 0 22px var(--glow)}
+h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+header small{display:block;color:var(--mute);font-size:12px}
+header button{margin-left:auto}
+button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 14px}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--nova);outline-offset:2px}
+#chat{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.m{max-width:88%;padding:10px 14px;border-radius:18px;white-space:pre-wrap;word-wrap:break-word}
+.u{align-self:flex-end;background:var(--me);border-bottom-right-radius:6px}
+.a{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:6px}
+#setup{margin:auto;text-align:center;max-width:340px}
+#setup .logo{width:84px;height:84px;margin:0 auto 18px;box-shadow:0 0 50px var(--glow)}
+#setup h2{margin:0 0 8px;font-size:24px}
+#setup p{color:var(--mute);margin:0 0 20px}
+.go{background:linear-gradient(135deg,var(--glow),var(--nova));border:0;color:#fff;font-weight:600;padding:13px 26px;font-size:17px}
+#bar{height:6px;background:var(--panel);border-radius:6px;margin-top:18px;overflow:hidden;display:none}
+#bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--glow),var(--nova))}
+#st{color:var(--mute);font-size:13px;margin-top:10px;min-height:20px}
+form{display:none;gap:10px;padding:12px 14px;border-top:1px solid var(--line);background:rgba(13,11,36,.9)}
+textarea{flex:1;resize:none;max-height:140px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:10px 14px;font:inherit}
+form .go{padding:10px 18px;font-size:16px}
+#note{display:none;padding:6px 14px;font-size:13px;color:var(--mute);align-items:center;gap:10px}#note img{height:38px;border-radius:8px}.m img{max-width:100%;border-radius:12px;display:block;margin-bottom:6px}#cam{padding:8px 12px;font-size:18px}
+#start{display:none!important}
+#tabs{display:none;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line)}
+#tabs button{flex:1}#tabs .on{background:linear-gradient(135deg,var(--glow),var(--nova));border:0;color:#fff;font-weight:600}
+#tr{display:none;flex:1;flex-direction:column;gap:10px;padding:16px;overflow-y:auto}
+#tr select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+#tr textarea{flex:none;min-height:110px;resize:vertical}
+#trout{min-height:110px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;white-space:pre-wrap}
+#mic,#spk,#cam{padding:8px 10px;font-size:17px}#mic.on{background:linear-gradient(135deg,var(--glow),var(--nova));border:0}textarea{min-width:0}
+#tabs button{padding:8px 4px;font-size:14px}
+#nc{display:none;flex:1;flex-direction:column;gap:10px;padding:16px;overflow-y:auto}
+#nc textarea{flex:none;min-height:90px;resize:vertical}
+#ncchips{display:flex;flex-wrap:wrap;gap:6px}#ncchips button{font-size:13px;padding:6px 10px}
+#ncout{display:none;margin:0;max-height:260px;overflow:auto;background:#0a0820;border:1px solid var(--line);border-radius:12px;padding:10px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+#ncbtns{display:none;gap:8px}#ncbtns button{flex:1}
+#ncframe{display:none;width:100%;height:440px;border:1px solid var(--line);border-radius:12px;background:#fff;flex:none}
+#menu{margin-left:0!important;padding:8px 12px;font-size:20px}
+#drawer{display:none;position:fixed;inset:0;z-index:50}#dback{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+#dside{position:absolute;left:0;top:0;bottom:0;width:84%;max-width:340px;background:var(--panel);border-right:1px solid var(--line);padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+#dside .dh{display:flex;align-items:center;justify-content:space-between}
+#dsearch{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+#dlist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;color:var(--mute)}
+.ci{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;color:var(--text)}
+.ci.on{border-color:var(--nova)}.ci span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.ci small{color:var(--mute)}.ci button{padding:2px 8px}
+#onrow{display:flex;gap:10px;align-items:center;color:var(--text);padding:6px 2px}#onrow input{width:22px;height:22px}#onnote{color:var(--mute);font-size:12px;line-height:1.3}
+.act{align-self:flex-start;display:flex;gap:6px;margin:-6px 0 0 6px}.act button{font-size:12px;padding:4px 10px;border-radius:10px;color:var(--mute)}
+.cb{background:#0a0820;border:1px solid var(--line);border-radius:10px;padding:8px;margin:6px 0;overflow-x:auto;white-space:pre;font:12px/1.4 ui-monospace,Menlo,monospace}
+.m code{background:#0a0820;border-radius:6px;padding:1px 5px;font:13px ui-monospace,Menlo,monospace}
+.sug{display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;margin:4px 0}.sug button{border-radius:16px;padding:8px 12px;font-size:14px}
+#uname,#ulen{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+</style>
+</head>
+<body>
+<header>
+  <button id="menu" type="button" hidden aria-label="Mis chats">☰</button>
+  <div class="logo"></div>
+  <div><h1>DarkNova AI</h1><small id="sub">Creada por Saúl Arce</small></div>
+  <button id="clear" type="button" hidden>Nuevo chat</button>
+</header>
+<div id="tabs"><button type="button" id="tabc" class="on">💬 Chat</button><button type="button" id="tabt">🌐 Traductor</button><button type="button" id="tabn">💻 Nova-Code</button></div>
+
+<div id="chat">
+  <div id="setup">
+    <div class="logo"></div>
+    <h2>Soy DarkNova AI</h2>
+    <p>Creada por Saúl Arce. Cargando… La primera vez descargo mi modelo (unos 700 MB): usa Wi-Fi y no cierres la app. Después entro en pocos segundos.</p>
+    <button class="go" id="start" type="button">Reintentar</button>
+    <div id="bar"><i></i></div>
+    <div id="st"></div>
+  </div>
+</div>
+
+<div id="tr">
+  <label for="trlang">Traducir a:</label>
+  <select id="trlang"><option>español</option><option>inglés</option><option>francés</option><option>alemán</option><option>italiano</option><option>portugués</option><option>catalán</option><option>árabe</option><option>chino</option><option>japonés</option></select>
+  <textarea id="trin" placeholder="Escribe o pega el texto (detecto el idioma solo)"></textarea>
+  <button class="go" id="trgo" type="button">Traducir</button>
+  <div id="trout" aria-live="polite"></div>
+  <button id="trcopy" type="button">Copiar traducción</button>
+</div>
+<div id="nc">
+  <strong>💻 Nova-Code</strong>
+  <textarea id="ncin" placeholder="Dime qué juego o app quieres. Ej: un juego de la serpiente con puntuación"></textarea>
+  <div id="ncchips"><button type="button">Juego de la serpiente</button><button type="button">Calculadora</button><button type="button">Lista de tareas</button><button type="button">Juego de memoria</button><button type="button">Tres en raya</button><button type="button">Adivina el número</button></div>
+  <button class="go" id="ncgo" type="button">Crear código</button>
+  <pre id="ncout"></pre>
+  <div id="ncbtns"><button type="button" id="nccopy">Copiar código</button><button type="button" id="ncrun">▶ Probar</button></div>
+  <iframe id="ncframe" sandbox="allow-scripts" title="Vista previa"></iframe>
+</div>
+<div id="note"></div>
+<form id="f">
+  <button type="button" id="cam" aria-label="Enviar foto">📷</button><input type="file" id="file" accept="image/*" hidden><button type="button" id="mic" aria-label="Hablar con DarkNova">🎤</button><button type="button" id="spk" aria-label="Leer respuestas en voz alta">🔇</button>
+  <textarea id="q" rows="1" placeholder="Escribe a DarkNova AI…"></textarea>
+  <button class="go" id="send" type="submit">Enviar</button>
+</form>
+
+<div id="drawer"><div id="dback"></div><aside id="dside">
+  <div class="dh"><strong>Mis chats</strong><button id="dclose" type="button" aria-label="Cerrar">✕</button></div>
+  <input id="dsearch" type="search" placeholder="Buscar chats…">
+  <button class="go" id="dnew" type="button">+ Nuevo chat</button>
+  <label id="onrow"><input type="checkbox" id="onl"><span>🌐 Modo online (más lista)</span></label>
+  <small id="onnote">Usa un servicio de IA gratuito en internet. Tus mensajes se envían a ese servicio. Si lo apagas, todo se queda en tu móvil.</small>
+  <input id="uname" placeholder="Tu nombre (opcional)" maxlength="30">
+  <select id="ulen"><option value="b">Respuestas breves</option><option value="n">Respuestas normales</option><option value="d">Respuestas detalladas</option></select>
+  <div id="dlist"></div>
+</aside></div>
+<script type="module">
+const LIBS = ["https://esm.run/@mlc-ai/web-llm", "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm"];
+async function loadLib() {
+  let last;
+  for (const u of LIBS) { try { return await import(u); } catch (e) { last = e; } }
+  throw last;
+}
+
+const MODEL = (() => { try { return localStorage.getItem("dn-model"); } catch (e) { return null; } })() || "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Si no estás segura de algo, dilo en lugar de inventar. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve.";
+const $ = id => document.getElementById(id);
+const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
+let engine, webllm, history = [], busy = false;
+const VISION = "Phi-3.5-vision-instruct-q4f32_1-MLC";
+let cur = MODEL;
+const mk = cb => webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 2048 });
+let chats = [], curId = null;
+const loadChats = () => { try { chats = JSON.parse(localStorage.getItem("dn-chats") || "[]"); } catch (e) { chats = []; } };
+const persist = () => { try { localStorage.setItem("dn-chats", JSON.stringify(chats)); localStorage.setItem("dn-cur", curId || ""); } catch (e) {} };
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const save = () => {
+  if (!curId || !history.length) return;
+  let c = chats.find(x => x.id === curId);
+  if (!c) { c = { id: curId, title: "Chat nuevo", ts: Date.now(), msgs: [] }; chats.unshift(c); }
+  c.msgs = history.slice(-60); c.ts = Date.now();
+  const u = c.msgs.find(m => m.role === "user"); if (u) c.title = u.content.replace(/^📷 /, "").slice(0, 40);
+  persist();
+};
+
+// Icono para la pantalla de inicio
+try {
+  const c = document.createElement("canvas"); c.width = c.height = 180;
+  const x = c.getContext("2d");
+  x.fillStyle = "#0d0b24"; x.fillRect(0, 0, 180, 180);
+  const g = x.createRadialGradient(70, 70, 4, 90, 90, 62);
+  g.addColorStop(0, "#fff"); g.addColorStop(.3, "#ff5fa8"); g.addColorStop(.7, "#7c5cff"); g.addColorStop(1, "#1a1450");
+  x.fillStyle = g; x.beginPath(); x.arc(90, 90, 62, 0, 7); x.fill();
+  const l = document.createElement("link"); l.rel = "apple-touch-icon"; l.href = c.toDataURL(); document.head.appendChild(l);
+} catch (e) {}
+
+function add(text, cls, pic) {
+  const d = document.createElement("div"); d.className = "m " + cls;
+  if (pic) { const im = document.createElement("img"); im.src = pic; d.appendChild(im); }
+  if (cls === "a") md(d, text); else d.appendChild(document.createTextNode(text));
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
+}
+
+const GREET = "Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?";
+function renderChat() {
+  chat.innerHTML = "";
+  if (!history.length) {
+    add(GREET, "a");
+    const sg = document.createElement("div"); sg.className = "sug";
+    ["💡 Dame una idea para hoy", "😄 Cuéntame un chiste", "📚 Explícame algo curioso", "✍️ Ayúdame a escribir un mensaje"].forEach(t => sg.appendChild(mkBtn(t, () => { q.value = t.replace(/^\S+\s/, ""); f.requestSubmit(); })));
+    chat.appendChild(sg); return;
+  }
+  history.forEach((m, i) => { const d = add(m.content, m.role === "user" ? "u" : "a"); if (m.role !== "user") addActions(d, i === history.length - 1); });
+}
+function showChat() {
+  $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("menu").hidden = false; $("tabs").style.display = "flex";
+  loadChats();
+  if (!chats.length) { try { const old = JSON.parse(localStorage.getItem("dn-history") || "[]"); if (old.length) chats.push({ id: newId(), title: "Chat anterior", ts: Date.now(), msgs: old }); } catch (e) {} }
+  let cid = ""; try { cid = localStorage.getItem("dn-cur") || ""; } catch (e) {}
+  const c = chats.find(x => x.id === cid) || chats[0];
+  if (c) { curId = c.id; history = c.msgs.slice(); } else { curId = newId(); history = []; }
+  persist();
+  if (history.length && history[history.length - 1].role === "user") { const l = history.pop(); save(); q.value = l.content.replace(/^📷 /, ""); }
+  try { const d = localStorage.getItem("dn-draft"); if (d) { q.value = d; localStorage.removeItem("dn-draft"); } } catch (e) {}
+  renderChat();
+  let pref = null; try { pref = localStorage.getItem("dn-online"); } catch (e) {}
+  if (pref === null) setTimeout(() => { setOnline(confirm("¿Activar el modo online?\n\nDarkNova será mucho más lista porque usa un servicio de IA gratuito en internet, pero tus mensajes se envían a ese servicio. Si cancelas, todo se queda en tu móvil.\n\nPuedes cambiarlo en ☰.")); }, 600);
+}
+
+let tries = 0;
+const retryLater = () => { if (++tries <= 3) setTimeout(startApp, 5000); else st.textContent += " Cierra la app y ábrela otra vez."; };
+function failReload() {
+  try {
+    const now = Date.now(), n = JSON.parse(localStorage.getItem("dn-fails") || "[]").filter(x => now - x < 180000); n.push(now);
+    localStorage.setItem("dn-fails", JSON.stringify(n));
+    if (n.length >= 3 && !localStorage.getItem("dn-model")) { localStorage.setItem("dn-model", "Qwen2.5-0.5B-Instruct-q4f32_1-MLC"); localStorage.setItem("dn-fails", "[]"); }
+  } catch (e) {}
+  setTimeout(() => location.reload(), 1500);
+}
+const startApp = async () => {
+  $("start").disabled = true; bar.style.display = "block";
+  st.textContent = "Iniciando…";
+  if (!location.protocol.startsWith("http")) {
+    st.textContent = "Abre DarkNova desde su enlace de Netlify o GitHub en Safari, no desde el archivo suelto.";
+    return;
+  }
+  if (!navigator.gpu) {
+    st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU). Activa WebGPU en Ajustes > Apps > Safari > Avanzado > Funciones.";
+    return;
+  }
+  try {
+    st.textContent = "Cargando motor de IA…";
+    webllm = await loadLib();
+    engine = await mk(p => { bar.firstElementChild.style.width = Math.round(p.progress * 100) + "%"; st.textContent = p.text; });
+    try { localStorage.setItem("dn-ready", "1"); } catch (e) {}
+    showChat();
+  } catch (e) {
+    st.textContent = "No se pudo cargar el modelo: " + (e.message || e);
+    retryLater();
+  }
+};
+$("start").onclick = startApp;
+$("start").style.display = "none"; startApp();
+
+let img = null;
+const note = $("note");
+function preview() {
+  note.style.display = "flex"; note.innerHTML = "";
+  const im = document.createElement("img"); im.src = img;
+  const sp = document.createElement("span"); sp.textContent = "Foto lista";
+  const x = document.createElement("button"); x.type = "button"; x.textContent = "Quitar";
+  x.onclick = () => { img = null; note.style.display = "none"; };
+  note.append(im, sp, x);
+}
+function shrink(file) {
+  return new Promise((ok, no) => {
+    const u = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 672 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); ok(c.toDataURL("image/jpeg", .85));
+    };
+    im.onerror = no; im.src = u;
+  });
+}
+$("cam").onclick = () => { if (!busy && engine) $("file").click(); };
+$("file").onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ""; if (!file || busy) return;
+  try { img = await shrink(file); } catch (err) { note.style.display = "flex"; note.textContent = "No pude leer la foto."; return; }
+  if (cur === VISION) { preview(); return; }
+  if (!confirm("Para ver fotos, DarkNova descarga un modelo extra de unos 4 GB (solo la primera vez). Puede fallar en iPhones con poca memoria. ¿Continuar?")) { img = null; return; }
+  busy = true; note.style.display = "flex"; note.textContent = "Descargando modelo de fotos…";
+  try { await engine.unload(); } catch (e2) {}
+  try {
+    cur = VISION;
+    engine = await mk(p => { note.textContent = "Modelo de fotos: " + Math.round(p.progress * 100) + "%"; });
+    preview();
+  } catch (err) {
+    img = null; cur = MODEL;
+    note.textContent = "No se pudo cargar el modelo de fotos (poca memoria). Vuelvo al modo texto…";
+    try { engine = await mk(() => {}); note.textContent = "No se pudo cargar el modelo de fotos (poca memoria). Sigues en modo texto."; } catch (e3) { note.textContent = "Cierra la app y ábrela otra vez."; }
+  }
+  busy = false;
+};
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, speak = false;
+try { speak = localStorage.getItem("dn-speak") === "1"; } catch (e) {}
+const flash = m => { note.style.display = "flex"; note.textContent = m; setTimeout(() => { if (!img) note.style.display = "none"; }, 5000); };
+function say(t) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = "es-ES"; speechSynthesis.speak(u); } catch (e) {} }
+const paintSpk = () => { $("spk").textContent = speak ? "🔊" : "🔇"; }; paintSpk();
+$("spk").onclick = () => {
+  speak = !speak; try { localStorage.setItem("dn-speak", speak ? "1" : "0"); } catch (e) {}
+  paintSpk();
+  if (speak) { say("Hola, soy DarkNova AI. Ahora te leeré mis respuestas."); flash("Voz activada: leeré mis respuestas en voz alta."); }
+  else { try { speechSynthesis.cancel(); } catch (e) {} flash("Voz desactivada."); }
+};
+$("mic").onclick = () => {
+  if (!SR) { flash("Este navegador no permite dictado aquí. Usa el micrófono del teclado del iPhone."); return; }
+  if (rec) { rec.stop(); return; }
+  try { speechSynthesis.cancel(); } catch (e) {}
+  rec = new SR(); rec.lang = "es-ES"; rec.interimResults = true; rec.continuous = false;
+  let fin = "";
+  rec.onresult = ev => { let t = ""; for (const r of ev.results) t += r[0].transcript; q.value = t; fin = t; };
+  rec.onerror = ev => flash("No pude usar el micrófono (" + ev.error + "). Revisa el permiso en Ajustes, Apps, Safari, Micrófono.");
+  rec.onend = () => { $("mic").classList.remove("on"); rec = null; if (fin.trim()) f.requestSubmit(); };
+  try { $("mic").classList.add("on"); rec.start(); } catch (e) { $("mic").classList.remove("on"); rec = null; }
+};
+
+function showTab(t) {
+  $("chat").style.display = t === "c" ? "flex" : "none"; f.style.display = t === "c" ? "flex" : "none";
+  $("tr").style.display = t === "t" ? "flex" : "none"; $("nc").style.display = t === "n" ? "flex" : "none";
+  if (t !== "c") $("note").style.display = "none";
+  $("tabc").classList.toggle("on", t === "c"); $("tabt").classList.toggle("on", t === "t"); $("tabn").classList.toggle("on", t === "n");
+}
+$("tabc").onclick = () => showTab("c"); $("tabt").onclick = () => showTab("t"); $("tabn").onclick = () => showTab("n");
+$("trcopy").onclick = () => { try { navigator.clipboard.writeText($("trout").textContent); $("trcopy").textContent = "¡Copiado!"; setTimeout(() => $("trcopy").textContent = "Copiar traducción", 1500); } catch (e) {} };
+$("trgo").onclick = async () => {
+  const t = $("trin").value.trim(); if (!t || busy || !engine) return;
+  busy = true; const o = $("trout"); o.textContent = "…";
+  const go = async () => {
+    if (ONL()) { try { const tr = await onlineChat([{ role: "system", content: "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones ni comillas." }, { role: "user", content: t }], 700, ["openai"]); o.textContent = tr; return; } catch (eo) {} }
+    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada." }, { role: "user", content: t }], stream: true, temperature: 0.1, max_tokens: 700 });
+    let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
+  };
+  try { try { await go(); } catch (e1) { if (!/dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e1 && e1.message) || e1))) throw e1; o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); } }
+  catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
+  busy = false;
+};
+
+let online = false;
+try { online = localStorage.getItem("dn-online") === "1"; } catch (e) {}
+const ONL = () => online && navigator.onLine;
+const paintSub = () => { $("sub").textContent = "Creada por Saúl Arce · " + (online ? "modo online 🌐" : "modo local 📱"); $("onl").checked = online; };
+const setOnline = v => { online = v; try { localStorage.setItem("dn-online", v ? "1" : "0"); } catch (e) {} paintSub(); };
+async function onlineChat(messages, max, models) {
+  let last;
+  for (const model of models || ["searchgpt", "openai"]) {
+    try {
+      const ctrl = (curCtrl = new AbortController()), id = setTimeout(() => ctrl.abort(), 30000);
+      const r = await fetch("https://text.pollinations.ai/openai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: max || 600 }), signal: ctrl.signal });
+      clearTimeout(id);
+      if (!r.ok) throw new Error("http " + r.status);
+      const j = await r.json();
+      let t = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").trim();
+      t = t.replace(/\n*\W*Powered by Pollinations[\s\S]*$/i, "").replace(/\n*\W*Support our mission[\s\S]*$/i, "").trim();
+      if (t) return t;
+    } catch (e) { last = e; }
+  }
+  throw last || new Error("sin respuesta");
+}
+const LEN = { b: "Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.", n: "Responde con claridad en 3 a 6 frases.", d: "Da respuestas completas y detalladas, con pasos o listas cuando ayuden." };
+function sysExtra() {
+  let nm = "", ln = "b"; try { nm = localStorage.getItem("dn-name") || ""; ln = localStorage.getItem("dn-len") || "b"; } catch (e) {}
+  const now = new Date().toLocaleString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return " " + (LEN[ln] || LEN.b) + " Hoy es " + now + "." + (nm ? " El usuario se llama " + nm + "; llámale por su nombre de vez en cuando." : "");
+}
+let curCtrl = null, stopped = false;
+function stopGen() { stopped = true; try { engine.interruptGenerate(); } catch (e) {} try { if (curCtrl) curCtrl.abort(); } catch (e) {} }
+const mkBtn = (t, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = fn; return b; };
+function md(el, text) {
+  el.textContent = ""; el.dataset.raw = text;
+  text.split(/```/).forEach((part, i) => {
+    if (i % 2) { const pre = document.createElement("pre"); pre.className = "cb"; pre.textContent = part.replace(/^[a-z]*\n/i, "").trim(); el.appendChild(pre); }
+    else part.split(/(\*\*[^*]+\*\*|`[^`]+`)/).forEach(seg => {
+      if (/^\*\*[^*]+\*\*$/.test(seg)) { const b = document.createElement("b"); b.textContent = seg.slice(2, -2); el.appendChild(b); }
+      else if (/^`[^`]+`$/.test(seg)) { const c = document.createElement("code"); c.textContent = seg.slice(1, -1); el.appendChild(c); }
+      else if (seg) el.appendChild(document.createTextNode(seg));
+    });
+  });
+}
+function addActions(d, last) {
+  if (last) chat.querySelectorAll(".rg").forEach(x => x.remove());
+  const row = document.createElement("div"); row.className = "act";
+  const cp = mkBtn("📋 Copiar", () => { try { navigator.clipboard.writeText(d.dataset.raw || d.textContent); cp.textContent = "✓ Copiado"; setTimeout(() => { cp.textContent = "📋 Copiar"; }, 1200); } catch (e) {} });
+  row.appendChild(cp);
+  if (last) { const rg = mkBtn("🔄 Otra respuesta", regen); rg.className = "rg"; row.appendChild(rg); }
+  d.after(row);
+}
+function regen() {
+  if (busy) return;
+  const n = history.length; if (n < 2 || history[n - 1].role !== "assistant" || history[n - 2].role !== "user") return;
+  const u = history[n - 2].content.replace(/^📷 /, "");
+  history.pop(); history.pop(); save(); renderChat(); q.value = u; f.requestSubmit();
+}
+const BASE = "body{margin:0;padding:12px;background:#0d0b24;color:#fff;font-family:-apple-system,sans-serif;text-align:center}button{font:inherit;border:0;border-radius:12px;background:#7c5cff;color:#fff;padding:12px 16px;margin:3px}.k{width:90px;height:90px;font-size:38px}#g{display:grid;grid-template-columns:repeat(3,90px);gap:6px;justify-content:center;margin:12px 0}#m{font-size:20px;margin:8px}input{font:inherit;font-size:22px;padding:10px;border-radius:12px;border:0;width:70%;text-align:center}";
+const page = (css, body, js) => "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>" + BASE + css + "</style></head><body>" + body + "<script>" + js + "<\/script></body></html>";
+const TPL = {
+  snake: () => page("canvas{background:#171438;border-radius:12px;touch-action:none}button{width:64px;height:54px;font-size:22px}", `<div id="m">Puntos: 0</div><canvas id="c" width="300" height="300"></canvas><div><button onclick="d(0,-1)">▲</button></div><div><button onclick="d(-1,0)">◀</button><button onclick="d(0,1)">▼</button><button onclick="d(1,0)">▶</button></div>`, `
+var c=document.getElementById('c'),x=c.getContext('2d'),S=20,N=15,s,dx,dy,f,sc;
+function m(t){document.getElementById('m').textContent=t}
+function r(){s=[{x:7,y:7}];dx=1;dy=0;sc=0;f={x:3,y:3};m('Puntos: 0')}
+function d(a,b){if(a!==-dx||b!==-dy){dx=a;dy=b}}
+function tick(){var h={x:s[0].x+dx,y:s[0].y+dy};
+if(h.x<0||h.y<0||h.x>=N||h.y>=N||s.some(function(p){return p.x==h.x&&p.y==h.y})){r();return}
+s.unshift(h);
+if(h.x==f.x&&h.y==f.y){sc++;m('Puntos: '+sc);f={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}else{s.pop()}
+x.fillStyle='#171438';x.fillRect(0,0,300,300);
+x.fillStyle='#ff5fa8';x.fillRect(f.x*S,f.y*S,S-2,S-2);
+x.fillStyle='#8cf';s.forEach(function(p){x.fillRect(p.x*S,p.y*S,S-2,S-2)})}
+var sx=0,sy=0;
+c.addEventListener('touchstart',function(e){sx=e.touches[0].clientX;sy=e.touches[0].clientY});
+c.addEventListener('touchend',function(e){var a=e.changedTouches[0].clientX-sx,b=e.changedTouches[0].clientY-sy;if(Math.abs(a)>Math.abs(b)){d(a>0?1:-1,0)}else{d(0,b>0?1:-1)}});
+document.addEventListener('keydown',function(e){var k={37:[-1,0],38:[0,-1],39:[1,0],40:[0,1]}[e.keyCode];if(k)d(k[0],k[1])});
+r();setInterval(tick,140);`),
+  ttt: () => page("", `<h2>Tres en raya</h2><div id="m"></div><div id="g"></div><button onclick="r()">Reiniciar</button>`, `
+var b,t,o,L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function m(s){document.getElementById('m').textContent=s}
+function draw(){var g=document.getElementById('g');g.innerHTML='';b.forEach(function(v,i){var e=document.createElement('button');e.className='k';e.textContent=v;e.onclick=function(){play(i)};g.appendChild(e)})}
+function r(){b=['','','','','','','','',''];t='X';o=false;draw();m('Turno: X')}
+function play(i){if(o||b[i])return;b[i]=t;
+var w=L.some(function(l){return l.every(function(k){return b[k]==t})});draw();
+if(w){o=true;m('¡Gana '+t+'! 🎉');return}
+if(b.every(function(v){return v})){o=true;m('¡Empate!');return}
+t=t=='X'?'O':'X';m('Turno: '+t)}
+r();`),
+  calc: () => page("#g{grid-template-columns:repeat(4,70px)}.k{width:70px;height:60px;font-size:24px}", `<h2>Calculadora</h2><input id="d" readonly><div id="g"></div>`, `
+var d=document.getElementById('d'),g=document.getElementById('g');
+'7 8 9 / 4 5 6 * 1 2 3 - 0 . = +'.split(' ').forEach(function(k){var e=document.createElement('button');e.className='k';e.textContent=k;e.onclick=function(){press(k)};g.appendChild(e)});
+var cl=document.createElement('button');cl.className='k';cl.textContent='C';cl.onclick=function(){d.value=''};g.appendChild(cl);
+function press(k){if(k=='='){try{var s=d.value.split('').filter(function(ch){return '0123456789+-*/.()'.indexOf(ch)>-1}).join('');d.value=s?String(Function('return ('+s+')')()):''}catch(e){d.value='Error'}}else{d.value+=k}}`),
+  guess: () => page("", `<h2>Adivina el número</h2><div id="m"></div><input id="v" type="number" placeholder="1 a 100"><div><button onclick="go()">Probar</button><button onclick="r()">Nuevo juego</button></div>`, `
+var n,i;
+function m(s){document.getElementById('m').textContent=s}
+function r(){n=Math.floor(Math.random()*100)+1;i=0;document.getElementById('v').value='';m('Pienso un número del 1 al 100')}
+function go(){var v=Number(document.getElementById('v').value);if(!v)return;i++;
+m(v<n?'Más alto ⬆️':(v>n?'Más bajo ⬇️':'¡Correcto en '+i+' intentos! 🎉'))}
+r();`),
+  memory: () => page("#g{grid-template-columns:repeat(4,70px)}.k{width:70px;height:70px;font-size:30px}", `<h2>Memoria</h2><div id="m"></div><div id="g"></div><button onclick="r()">Reiniciar</button>`, `
+var E=['🐱','🐶','🦊','🐸','🐵','🐼','🦁','🐙'],c,f,o,l,p;
+function m(s){document.getElementById('m').textContent=s}
+function draw(){var g=document.getElementById('g');g.innerHTML='';c.forEach(function(v,i){var e=document.createElement('button');e.className='k';e.textContent=(f[i]||o.indexOf(i)>-1)?v:'❓';e.onclick=function(){tap(i)};g.appendChild(e)})}
+function r(){c=E.concat(E).sort(function(){return Math.random()-.5});f=c.map(function(){return false});o=[];l=false;p=0;draw();m('Parejas: 0/8')}
+function tap(i){if(l||f[i]||o.indexOf(i)>-1)return;o.push(i);draw();
+if(o.length==2){l=true;setTimeout(function(){if(c[o[0]]==c[o[1]]){f[o[0]]=true;f[o[1]]=true;p++;m('Parejas: '+p+'/8')}o=[];l=false;draw();if(p==8)m('¡Ganaste! 🎉')},700)}}
+r();`)
+};
+const norm = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const pick = t => { t = norm(t); if (/serpiente|snake|culebr/.test(t)) return "snake"; if (/tres en raya|3 en raya|tictac|tic tac/.test(t)) return "ttt"; if (/calculadora/.test(t)) return "calc"; if (/adivin|numero secreto/.test(t)) return "guess"; if (/memoria|parejas/.test(t)) return "memory"; return null; };
+const CODE_SYS = "Eres Nova-Code, la programadora de DarkNova AI. Crea lo que pida el usuario como UN SOLO archivo HTML con <style> y <script> dentro, para un iPhone (táctil, sin librerías ni imágenes externas). IMPORTANTE: el programa debe ser MUY corto y simple, máximo 50 líneas en total, sin comentarios, y debe terminar con <\/script></body></html>. Responde SOLO con el código en un bloque ```html, sin explicaciones.";
+let ncCode = "";
+document.querySelectorAll("#ncchips button").forEach(b => { b.onclick = () => { $("ncin").value = b.textContent; }; });
+$("nccopy").onclick = () => { try { navigator.clipboard.writeText(ncCode); $("nccopy").textContent = "¡Copiado!"; setTimeout(() => $("nccopy").textContent = "Copiar código", 1500); } catch (e) {} };
+function closeCode(c) {
+  let o = c;
+  if ((o.match(/<script\b/gi) || []).length > (o.match(/<\/script>/gi) || []).length) o += "\n<\/script>";
+  if (!/<\/body>/i.test(o)) o += "\n</body>";
+  if (!/<\/html>/i.test(o)) o += "\n</html>";
+  return o;
+}
+const GUARD = '<script>window.onerror=function(m,s,l){var p=document.createElement("pre");p.style.cssText="color:#c00;font:12px monospace;white-space:pre-wrap;padding:8px";p.textContent="Error en el código: "+m+" (línea "+l+"). Prueba a pulsar Crear código otra vez o pide algo más sencillo.";document.body.appendChild(p)}<\/script>';
+$("ncrun").onclick = () => { const fr = $("ncframe"); fr.style.display = "block"; fr.srcdoc = GUARD + closeCode(ncCode); fr.scrollIntoView({ behavior: "smooth" }); };
+$("ncgo").onclick = async () => {
+  const t = $("ncin").value.trim(); if (!t || busy || !engine) return;
+  const key = pick(t);
+  if (key) {
+    ncCode = TPL[key](); const o2 = $("ncout"); o2.style.display = "block"; o2.textContent = ncCode;
+    $("ncbtns").style.display = "flex"; $("ncrun").click(); return;
+  }
+  busy = true; ncCode = ""; const o = $("ncout"); o.style.display = "block"; o.textContent = "Creando código…";
+  $("ncbtns").style.display = "none"; $("ncframe").style.display = "none";
+  let acc = "", cut = false;
+  const go = async () => {
+    acc = ""; cut = false;
+    if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { o.textContent = "Sin conexión, uso el modo local…"; } }
+    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 1600 });
+    for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; if (ch.choices[0]?.finish_reason === "length") cut = true; o.textContent = acc; o.scrollTop = o.scrollHeight; }
+  };
+  try {
+    try { await go(); } catch (e1) { o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); }
+    const m = acc.match(/```(?:html)?\s*\n([\s\S]*?)(?:```|$)/);
+    ncCode = (m ? m[1] : acc).trim();
+    o.textContent = ncCode + (cut ? "\n\n<!-- El código se cortó por el límite del modelo. Pídeme algo más sencillo. -->" : "");
+    $("ncbtns").style.display = "flex"; $("ncrun").click();
+  } catch (e2) {
+    if (/dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e2 && e2.message) || e2))) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
+    else { o.textContent = "No he podido crear eso. Prueba con algo más corto o más sencillo."; }
+  }
+  busy = false;
+};
+
+async function lookup(t) {
+  if (!navigator.onLine || t.length < 8) return "";
+  if (/traduc|c[oó]mo se dice|how do you say/i.test(t)) return "";
+  if (!/[?¿]|^(qu[eé]|qui[eé]n|cu[aá]l|cu[aá]ndo|d[oó]nde|c[oó]mo|cu[aá]nt)/i.test(t)) return "";
+  const term = t.replace(/[¿?¡!]/g, "").replace(/^(qu[eé]|qui[eé]nes?|cu[aá]les?|cu[aá]ndo|d[oó]nde|c[oó]mo|cu[aá]nt[oa]s?)\s+(es|son|fue|fueron|era|significa|est[aá]|hay)?\s*(un[ao]?s?|el|la|los|las)?\s*/i, "").trim();
+  try {
+    const ctrl = new AbortController(), id = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch("https://es.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&prop=extracts&exintro=1&explaintext=1&exchars=800&gsrsearch=" + encodeURIComponent(term), { signal: ctrl.signal });
+    clearTimeout(id);
+    const j = await r.json(), p = Object.values(j.query?.pages || {})[0];
+    return p ? p.title + ": " + p.extract : "";
+  } catch (e) { return ""; }
+}
+
+f.onsubmit = async e => {
+  e.preventDefault();
+  const t = q.value.trim(); if ((!t && !img) || busy || !engine) return;
+  busy = true; stopped = false; $("send").textContent = "■ Parar"; q.value = ""; const pic = img; img = null; note.style.display = "none";
+  const shown = t || "Mira esta foto";
+  add(shown, "u", pic);
+  history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
+  const out = add("…", "a"); let acc = "";
+  const ctx = pic ? "" : await lookup(t);
+  const isGpu = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
+  const ask = async lite => {
+    acc = "";
+    let msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+    if (lite) msgs = msgs.slice(-1);
+    let used = 0; const keep = [];
+    for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
+    msgs = keep;
+    if (ONL() && !pic && !lite) {
+      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + (ctx ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx.slice(0, 600) : "") }, ...msgs]); md(out, acc); return; }
+      catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } out.textContent = "Sin conexión con el servicio online, uso el modo local…"; }
+    }
+    if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + (ctx && !lite ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx.slice(0, 600) : "") }, ...msgs], stream: true, temperature: 0.4, max_tokens: 400 });
+    for await (const ch of s) {
+      acc += ch.choices[0]?.delta?.content || ""; md(out, acc); chat.scrollTop = chat.scrollHeight;
+    }
+  };
+  const SORRY = "Uy, no he sabido responder a eso 😅. ¿Me lo preguntas de otra forma o con menos palabras?";
+  try {
+    try { await ask(); }
+    catch (e1) {
+      if (isGpu(e1)) {
+        out.textContent = "Reiniciando el motor, un momento…";
+        try { await engine.unload(); } catch (e) {}
+        engine = await mk(() => {});
+        out.textContent = "…"; await ask();
+      } else { out.textContent = "…"; await ask(true); }
+    }
+    if (!acc.trim()) { acc = stopped ? "⏹ Detenido." : SORRY; md(out, acc); }
+    history.push({ role: "assistant", content: acc }); save();
+    addActions(out, true);
+    if (speak) say(acc);
+  } catch (err) {
+    if (isGpu(err)) { out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; failReload(); }
+    else { out.textContent = SORRY; history.push({ role: "assistant", content: SORRY }); save(); }
+  }
+  busy = false; $("send").textContent = "Enviar";
+};
+
+const drawer = $("drawer");
+const closeDrawer = () => { drawer.style.display = "none"; };
+function fmt(ts) { const d = new Date(ts); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("es", { day: "numeric", month: "short" }); }
+function drawList() {
+  const k = $("dsearch").value.trim().toLowerCase(), box = $("dlist"); box.innerHTML = "";
+  const list = chats.filter(c => !k || c.title.toLowerCase().includes(k) || c.msgs.some(m => m.content.toLowerCase().includes(k))).sort((a, b) => b.ts - a.ts);
+  if (!list.length) { box.textContent = k ? "No hay chats con eso." : "Aún no tienes chats guardados."; return; }
+  list.forEach(c => {
+    const row = document.createElement("div"); row.className = "ci" + (c.id === curId ? " on" : "");
+    const t = document.createElement("span"); t.textContent = c.title;
+    const d = document.createElement("small"); d.textContent = fmt(c.ts);
+    const x = document.createElement("button"); x.type = "button"; x.textContent = "🗑"; x.setAttribute("aria-label", "Borrar chat");
+    row.onclick = () => openChat(c.id);
+    x.onclick = e => { e.stopPropagation(); if (busy || !confirm("¿Borrar este chat?")) return; chats = chats.filter(y => y.id !== c.id); if (c.id === curId) { curId = newId(); history = []; renderChat(); } persist(); drawList(); };
+    row.append(t, d, x); box.appendChild(row);
+  });
+}
+function openChat(id) {
+  if (busy) return; save();
+  const c = chats.find(x => x.id === id); if (!c) return;
+  curId = id; history = c.msgs.slice(); persist(); renderChat(); showTab("c"); closeDrawer(); q.value = "";
+}
+function newChat() {
+  if (busy) return; save();
+  if (history.length) { curId = newId(); history = []; persist(); }
+  renderChat(); showTab("c"); closeDrawer(); q.value = "";
+}
+$("menu").onclick = () => { save(); drawer.style.display = "block"; $("dsearch").value = ""; drawList(); };
+$("dclose").onclick = closeDrawer; $("dback").onclick = closeDrawer;
+$("onl").onchange = () => {
+  if ($("onl").checked && !confirm("El modo online hace a DarkNova mucho más lista, pero tus mensajes se envían a un servicio de IA gratuito en internet. ¿Activarlo?")) { $("onl").checked = false; return; }
+  setOnline($("onl").checked);
+};
+paintSub();
+$("dsearch").oninput = drawList; $("dnew").onclick = newChat; $("clear").onclick = newChat;
+window.addEventListener("pagehide", save);
+try { $("uname").value = localStorage.getItem("dn-name") || ""; $("ulen").value = localStorage.getItem("dn-len") || "b"; } catch (e) {}
+$("uname").oninput = () => { try { localStorage.setItem("dn-name", $("uname").value.trim()); } catch (e) {} };
+$("ulen").onchange = () => { try { localStorage.setItem("dn-len", $("ulen").value); } catch (e) {} };
+$("send").addEventListener("click", e => { if (busy && $("send").textContent.indexOf("Parar") > -1) { e.preventDefault(); stopGen(); } });
+
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { save(); hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > 20000 && !busy) { try { localStorage.setItem("dn-draft", q.value); } catch (e) {} location.reload(); }
+});
+q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
+</script>
+</body>
+</html>
