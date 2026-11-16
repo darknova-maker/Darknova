@@ -50,8 +50,8 @@ form .go{padding:10px 18px;font-size:16px}
   <div id="setup">
     <div class="logo"></div>
     <h2>Soy DarkNova AI</h2>
-    <p>Fui creada por Saúl Arce. Descarga mi modelo una sola vez (≈700 MB, usa Wi-Fi) y luego funciono sin internet, sin límites y gratis.</p>
-    <button class="go" id="start" type="button">Descargar y empezar</button>
+    <p>Creada por Saúl Arce. Cargando… La primera vez descargo mi modelo (unos 700 MB): usa Wi-Fi y no cierres la app. Después entro en pocos segundos.</p>
+    <button class="go" id="start" type="button">Reintentar</button>
     <div id="bar"><i></i></div>
     <div id="st"></div>
   </div>
@@ -112,11 +112,11 @@ const startApp = async () => {
   st.textContent = "Iniciando…";
   if (!location.protocol.startsWith("http")) {
     st.textContent = "Abre DarkNova desde su enlace de Netlify o GitHub en Safari, no desde el archivo suelto.";
-    $("start").disabled = false; return;
+    $("start").disabled = false; $("start").style.display = ""; return;
   }
   if (!navigator.gpu) {
     st.textContent = "Tu iPhone necesita iOS 26 o superior (Safari con WebGPU). Activa WebGPU en Ajustes > Apps > Safari > Avanzado > Funciones.";
-    $("start").disabled = false; return;
+    $("start").disabled = false; $("start").style.display = ""; return;
   }
   try {
     st.textContent = "Cargando motor de IA…";
@@ -126,11 +126,11 @@ const startApp = async () => {
     showChat();
   } catch (e) {
     st.textContent = "No se pudo cargar el modelo: " + (e.message || e);
-    $("start").disabled = false;
+    $("start").disabled = false; $("start").style.display = "";
   }
 };
 $("start").onclick = startApp;
-try { if (localStorage.getItem("dn-ready")) startApp(); } catch (e) {}
+$("start").style.display = "none"; startApp();
 
 let img = null;
 const note = $("note");
