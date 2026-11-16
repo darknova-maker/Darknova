@@ -45,6 +45,7 @@ form .go{padding:10px 18px;font-size:16px}
 #tr select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
 #tr textarea{flex:none;min-height:110px;resize:vertical}
 #trout{min-height:110px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;white-space:pre-wrap}
+#mic,#spk,#cam{padding:8px 10px;font-size:17px}#mic.on{background:linear-gradient(135deg,var(--glow),var(--nova));border:0}textarea{min-width:0}
 </style>
 </head>
 <body>
@@ -76,7 +77,7 @@ form .go{padding:10px 18px;font-size:16px}
 </div>
 <div id="note"></div>
 <form id="f">
-  <button type="button" id="cam" aria-label="Enviar foto">📷</button><input type="file" id="file" accept="image/*" hidden>
+  <button type="button" id="cam" aria-label="Enviar foto">📷</button><input type="file" id="file" accept="image/*" hidden><button type="button" id="mic" aria-label="Hablar con DarkNova">🎤</button><button type="button" id="spk" aria-label="Leer respuestas en voz alta">🔇</button>
   <textarea id="q" rows="1" placeholder="Escribe a DarkNova AI…"></textarea>
   <button class="go" id="send" type="submit">Enviar</button>
 </form>
@@ -194,6 +195,30 @@ $("file").onchange = async e => {
   busy = false;
 };
 
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, speak = false;
+try { speak = localStorage.getItem("dn-speak") === "1"; } catch (e) {}
+const flash = m => { note.style.display = "flex"; note.textContent = m; setTimeout(() => { if (!img) note.style.display = "none"; }, 5000); };
+function say(t) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = "es-ES"; speechSynthesis.speak(u); } catch (e) {} }
+const paintSpk = () => { $("spk").textContent = speak ? "🔊" : "🔇"; }; paintSpk();
+$("spk").onclick = () => {
+  speak = !speak; try { localStorage.setItem("dn-speak", speak ? "1" : "0"); } catch (e) {}
+  paintSpk();
+  if (speak) { say("Hola, soy DarkNova AI. Ahora te leeré mis respuestas."); flash("Voz activada: leeré mis respuestas en voz alta."); }
+  else { try { speechSynthesis.cancel(); } catch (e) {} flash("Voz desactivada."); }
+};
+$("mic").onclick = () => {
+  if (!SR) { flash("Este navegador no permite dictado aquí. Usa el micrófono del teclado del iPhone."); return; }
+  if (rec) { rec.stop(); return; }
+  try { speechSynthesis.cancel(); } catch (e) {}
+  rec = new SR(); rec.lang = "es-ES"; rec.interimResults = true; rec.continuous = false;
+  let fin = "";
+  rec.onresult = ev => { let t = ""; for (const r of ev.results) t += r[0].transcript; q.value = t; fin = t; };
+  rec.onerror = ev => flash("No pude usar el micrófono (" + ev.error + "). Revisa el permiso en Ajustes, Apps, Safari, Micrófono.");
+  rec.onend = () => { $("mic").classList.remove("on"); rec = null; if (fin.trim()) f.requestSubmit(); };
+  try { $("mic").classList.add("on"); rec.start(); } catch (e) { $("mic").classList.remove("on"); rec = null; }
+};
+
 function showTab(t) {
   const tr = t === "t";
   $("chat").style.display = tr ? "none" : "flex"; f.style.display = tr ? "none" : "flex";
@@ -256,6 +281,7 @@ f.onsubmit = async e => {
       await ask();
     }
     history.push({ role: "assistant", content: acc }); save();
+    if (speak) say(acc);
   } catch (err) {
     out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; setTimeout(() => location.reload(), 1500);
   }
