@@ -12,7 +12,8 @@
 <style>
 :root{--bg:#0d0b24;--panel:#171438;--line:#2b2760;--text:#ece9ff;--mute:#8f8ac4;--nova:#ff5fa8;--glow:#7c5cff;--me:#2a2570}
 *{box-sizing:border-box}
-html,body{height:100%;margin:0}
+html{background:#0d0b24;height:100%}
+body{margin:0;height:100%}
 body{background:radial-gradient(900px 500px at 50% -10%,#241a66 0,var(--bg) 60%);color:var(--text);font:16px/1.5 -apple-system,"SF Pro Text",system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
 header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
 .logo{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff 0,var(--nova) 30%,var(--glow) 65%,#1a1450 100%);box-shadow:0 0 22px var(--glow)}
@@ -38,6 +39,12 @@ textarea{flex:1;resize:none;max-height:140px;background:var(--panel);color:var(-
 form .go{padding:10px 18px;font-size:16px}
 #note{display:none;padding:6px 14px;font-size:13px;color:var(--mute);align-items:center;gap:10px}#note img{height:38px;border-radius:8px}.m img{max-width:100%;border-radius:12px;display:block;margin-bottom:6px}#cam{padding:8px 12px;font-size:18px}
 #start{display:none!important}
+#tabs{display:none;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line)}
+#tabs button{flex:1}#tabs .on{background:linear-gradient(135deg,var(--glow),var(--nova));border:0;color:#fff;font-weight:600}
+#tr{display:none;flex:1;flex-direction:column;gap:10px;padding:16px;overflow-y:auto}
+#tr select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+#tr textarea{flex:none;min-height:110px;resize:vertical}
+#trout{min-height:110px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -46,6 +53,7 @@ form .go{padding:10px 18px;font-size:16px}
   <div><h1>DarkNova AI</h1><small>Creada por Saúl Arce · funciona en tu iPhone</small></div>
   <button id="clear" type="button" hidden>Nuevo chat</button>
 </header>
+<div id="tabs"><button type="button" id="tabc" class="on">💬 Chat</button><button type="button" id="tabt">🌐 Traductor</button></div>
 
 <div id="chat">
   <div id="setup">
@@ -58,6 +66,14 @@ form .go{padding:10px 18px;font-size:16px}
   </div>
 </div>
 
+<div id="tr">
+  <label for="trlang">Traducir a:</label>
+  <select id="trlang"><option>español</option><option>inglés</option><option>francés</option><option>alemán</option><option>italiano</option><option>portugués</option><option>catalán</option><option>árabe</option><option>chino</option><option>japonés</option></select>
+  <textarea id="trin" placeholder="Escribe o pega el texto (detecto el idioma solo)"></textarea>
+  <button class="go" id="trgo" type="button">Traducir</button>
+  <div id="trout" aria-live="polite"></div>
+  <button id="trcopy" type="button">Copiar traducción</button>
+</div>
 <div id="note"></div>
 <form id="f">
   <button type="button" id="cam" aria-label="Enviar foto">📷</button><input type="file" id="file" accept="image/*" hidden>
@@ -74,7 +90,7 @@ async function loadLib() {
 }
 
 const MODEL = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
-const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Si no estás segura de algo, dilo en lugar de inventar. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve. Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.";
+const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Si no estás segura de algo, dilo en lugar de inventar. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve. Sé breve y directa: normalmente 1 a 3 frases, y solo te extiendes si te lo piden.";
 const $ = id => document.getElementById(id);
 const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
 let engine, webllm, history = [], busy = false;
@@ -102,7 +118,7 @@ function add(text, cls, pic) {
 }
 
 function showChat() {
-  $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false;
+  $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("tabs").style.display = "flex";
   try { history = JSON.parse(localStorage.getItem("dn-history") || "[]"); } catch (e) { history = []; }
   if (!history.length) add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a");
   history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
@@ -174,6 +190,26 @@ $("file").onchange = async e => {
     note.textContent = "No se pudo cargar el modelo de fotos (poca memoria). Vuelvo al modo texto…";
     try { engine = await mk(() => {}); note.textContent = "No se pudo cargar el modelo de fotos (poca memoria). Sigues en modo texto."; } catch (e3) { note.textContent = "Cierra la app y ábrela otra vez."; }
   }
+  busy = false;
+};
+
+function showTab(t) {
+  const tr = t === "t";
+  $("chat").style.display = tr ? "none" : "flex"; f.style.display = tr ? "none" : "flex";
+  $("tr").style.display = tr ? "flex" : "none"; if (tr) $("note").style.display = "none";
+  $("tabt").classList.toggle("on", tr); $("tabc").classList.toggle("on", !tr);
+}
+$("tabc").onclick = () => showTab("c"); $("tabt").onclick = () => showTab("t");
+$("trcopy").onclick = () => { try { navigator.clipboard.writeText($("trout").textContent); $("trcopy").textContent = "¡Copiado!"; setTimeout(() => $("trcopy").textContent = "Copiar traducción", 1500); } catch (e) {} };
+$("trgo").onclick = async () => {
+  const t = $("trin").value.trim(); if (!t || busy || !engine) return;
+  busy = true; const o = $("trout"); o.textContent = "…";
+  const go = async () => {
+    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada." }, { role: "user", content: t }], stream: true, temperature: 0.1, max_tokens: 700 });
+    let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
+  };
+  try { try { await go(); } catch (e1) { o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); } }
+  catch (e2) { o.textContent = "No pude traducir. Cierra la app y ábrela otra vez."; }
   busy = false;
 };
 
