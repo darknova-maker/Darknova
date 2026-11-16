@@ -94,7 +94,7 @@ form .go{padding:10px 18px;font-size:16px}
 <div id="nc">
   <strong>💻 Nova-Code</strong>
   <textarea id="ncin" placeholder="Dime qué juego o app quieres. Ej: un juego de la serpiente con puntuación"></textarea>
-  <div id="ncchips"><button type="button">Juego de la serpiente</button><button type="button">Calculadora</button><button type="button">Lista de tareas</button><button type="button">Juego de memoria con cartas</button></div>
+  <div id="ncchips"><button type="button">Juego de la serpiente</button><button type="button">Calculadora</button><button type="button">Lista de tareas</button><button type="button">Juego de memoria</button><button type="button">Tres en raya</button><button type="button">Adivina el número</button></div>
   <button class="go" id="ncgo" type="button">Crear código</button>
   <pre id="ncout"></pre>
   <div id="ncbtns"><button type="button" id="nccopy">Copiar código</button><button type="button" id="ncrun">▶ Probar</button></div>
@@ -295,11 +295,65 @@ $("trgo").onclick = async () => {
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada." }, { role: "user", content: t }], stream: true, temperature: 0.1, max_tokens: 700 });
     let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
   };
-  try { try { await go(); } catch (e1) { o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); } }
+  try { try { await go(); } catch (e1) { if (!/dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e1 && e1.message) || e1))) throw e1; o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); } }
   catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
   busy = false;
 };
 
+const BASE = "body{margin:0;padding:12px;background:#0d0b24;color:#fff;font-family:-apple-system,sans-serif;text-align:center}button{font:inherit;border:0;border-radius:12px;background:#7c5cff;color:#fff;padding:12px 16px;margin:3px}.k{width:90px;height:90px;font-size:38px}#g{display:grid;grid-template-columns:repeat(3,90px);gap:6px;justify-content:center;margin:12px 0}#m{font-size:20px;margin:8px}input{font:inherit;font-size:22px;padding:10px;border-radius:12px;border:0;width:70%;text-align:center}";
+const page = (css, body, js) => "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>" + BASE + css + "</style></head><body>" + body + "<script>" + js + "<\/script></body></html>";
+const TPL = {
+  snake: () => page("canvas{background:#171438;border-radius:12px;touch-action:none}button{width:64px;height:54px;font-size:22px}", `<div id="m">Puntos: 0</div><canvas id="c" width="300" height="300"></canvas><div><button onclick="d(0,-1)">▲</button></div><div><button onclick="d(-1,0)">◀</button><button onclick="d(0,1)">▼</button><button onclick="d(1,0)">▶</button></div>`, `
+var c=document.getElementById('c'),x=c.getContext('2d'),S=20,N=15,s,dx,dy,f,sc;
+function m(t){document.getElementById('m').textContent=t}
+function r(){s=[{x:7,y:7}];dx=1;dy=0;sc=0;f={x:3,y:3};m('Puntos: 0')}
+function d(a,b){if(a!==-dx||b!==-dy){dx=a;dy=b}}
+function tick(){var h={x:s[0].x+dx,y:s[0].y+dy};
+if(h.x<0||h.y<0||h.x>=N||h.y>=N||s.some(function(p){return p.x==h.x&&p.y==h.y})){r();return}
+s.unshift(h);
+if(h.x==f.x&&h.y==f.y){sc++;m('Puntos: '+sc);f={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}else{s.pop()}
+x.fillStyle='#171438';x.fillRect(0,0,300,300);
+x.fillStyle='#ff5fa8';x.fillRect(f.x*S,f.y*S,S-2,S-2);
+x.fillStyle='#8cf';s.forEach(function(p){x.fillRect(p.x*S,p.y*S,S-2,S-2)})}
+var sx=0,sy=0;
+c.addEventListener('touchstart',function(e){sx=e.touches[0].clientX;sy=e.touches[0].clientY});
+c.addEventListener('touchend',function(e){var a=e.changedTouches[0].clientX-sx,b=e.changedTouches[0].clientY-sy;if(Math.abs(a)>Math.abs(b)){d(a>0?1:-1,0)}else{d(0,b>0?1:-1)}});
+document.addEventListener('keydown',function(e){var k={37:[-1,0],38:[0,-1],39:[1,0],40:[0,1]}[e.keyCode];if(k)d(k[0],k[1])});
+r();setInterval(tick,140);`),
+  ttt: () => page("", `<h2>Tres en raya</h2><div id="m"></div><div id="g"></div><button onclick="r()">Reiniciar</button>`, `
+var b,t,o,L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function m(s){document.getElementById('m').textContent=s}
+function draw(){var g=document.getElementById('g');g.innerHTML='';b.forEach(function(v,i){var e=document.createElement('button');e.className='k';e.textContent=v;e.onclick=function(){play(i)};g.appendChild(e)})}
+function r(){b=['','','','','','','','',''];t='X';o=false;draw();m('Turno: X')}
+function play(i){if(o||b[i])return;b[i]=t;
+var w=L.some(function(l){return l.every(function(k){return b[k]==t})});draw();
+if(w){o=true;m('¡Gana '+t+'! 🎉');return}
+if(b.every(function(v){return v})){o=true;m('¡Empate!');return}
+t=t=='X'?'O':'X';m('Turno: '+t)}
+r();`),
+  calc: () => page("#g{grid-template-columns:repeat(4,70px)}.k{width:70px;height:60px;font-size:24px}", `<h2>Calculadora</h2><input id="d" readonly><div id="g"></div>`, `
+var d=document.getElementById('d'),g=document.getElementById('g');
+'7 8 9 / 4 5 6 * 1 2 3 - 0 . = +'.split(' ').forEach(function(k){var e=document.createElement('button');e.className='k';e.textContent=k;e.onclick=function(){press(k)};g.appendChild(e)});
+var cl=document.createElement('button');cl.className='k';cl.textContent='C';cl.onclick=function(){d.value=''};g.appendChild(cl);
+function press(k){if(k=='='){try{var s=d.value.split('').filter(function(ch){return '0123456789+-*/.()'.indexOf(ch)>-1}).join('');d.value=s?String(Function('return ('+s+')')()):''}catch(e){d.value='Error'}}else{d.value+=k}}`),
+  guess: () => page("", `<h2>Adivina el número</h2><div id="m"></div><input id="v" type="number" placeholder="1 a 100"><div><button onclick="go()">Probar</button><button onclick="r()">Nuevo juego</button></div>`, `
+var n,i;
+function m(s){document.getElementById('m').textContent=s}
+function r(){n=Math.floor(Math.random()*100)+1;i=0;document.getElementById('v').value='';m('Pienso un número del 1 al 100')}
+function go(){var v=Number(document.getElementById('v').value);if(!v)return;i++;
+m(v<n?'Más alto ⬆️':(v>n?'Más bajo ⬇️':'¡Correcto en '+i+' intentos! 🎉'))}
+r();`),
+  memory: () => page("#g{grid-template-columns:repeat(4,70px)}.k{width:70px;height:70px;font-size:30px}", `<h2>Memoria</h2><div id="m"></div><div id="g"></div><button onclick="r()">Reiniciar</button>`, `
+var E=['🐱','🐶','🦊','🐸','🐵','🐼','🦁','🐙'],c,f,o,l,p;
+function m(s){document.getElementById('m').textContent=s}
+function draw(){var g=document.getElementById('g');g.innerHTML='';c.forEach(function(v,i){var e=document.createElement('button');e.className='k';e.textContent=(f[i]||o.indexOf(i)>-1)?v:'❓';e.onclick=function(){tap(i)};g.appendChild(e)})}
+function r(){c=E.concat(E).sort(function(){return Math.random()-.5});f=c.map(function(){return false});o=[];l=false;p=0;draw();m('Parejas: 0/8')}
+function tap(i){if(l||f[i]||o.indexOf(i)>-1)return;o.push(i);draw();
+if(o.length==2){l=true;setTimeout(function(){if(c[o[0]]==c[o[1]]){f[o[0]]=true;f[o[1]]=true;p++;m('Parejas: '+p+'/8')}o=[];l=false;draw();if(p==8)m('¡Ganaste! 🎉')},700)}}
+r();`)
+};
+const norm = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const pick = t => { t = norm(t); if (/serpiente|snake|culebr/.test(t)) return "snake"; if (/tres en raya|3 en raya|tictac|tic tac/.test(t)) return "ttt"; if (/calculadora/.test(t)) return "calc"; if (/adivin|numero secreto/.test(t)) return "guess"; if (/memoria|parejas/.test(t)) return "memory"; return null; };
 const CODE_SYS = "Eres Nova-Code, la programadora de DarkNova AI. Crea lo que pida el usuario como UN SOLO archivo HTML con <style> y <script> dentro, para un iPhone (táctil, sin librerías ni imágenes externas). IMPORTANTE: el programa debe ser MUY corto y simple, máximo 50 líneas en total, sin comentarios, y debe terminar con <\/script></body></html>. Responde SOLO con el código en un bloque ```html, sin explicaciones.";
 let ncCode = "";
 document.querySelectorAll("#ncchips button").forEach(b => { b.onclick = () => { $("ncin").value = b.textContent; }; });
@@ -315,6 +369,11 @@ const GUARD = '<script>window.onerror=function(m,s,l){var p=document.createEleme
 $("ncrun").onclick = () => { const fr = $("ncframe"); fr.style.display = "block"; fr.srcdoc = GUARD + closeCode(ncCode); fr.scrollIntoView({ behavior: "smooth" }); };
 $("ncgo").onclick = async () => {
   const t = $("ncin").value.trim(); if (!t || busy || !engine) return;
+  const key = pick(t);
+  if (key) {
+    ncCode = TPL[key](); const o2 = $("ncout"); o2.style.display = "block"; o2.textContent = ncCode;
+    $("ncbtns").style.display = "flex"; $("ncrun").click(); return;
+  }
   busy = true; ncCode = ""; const o = $("ncout"); o.style.display = "block"; o.textContent = "Creando código…";
   $("ncbtns").style.display = "none"; $("ncframe").style.display = "none";
   let acc = "", cut = false;
@@ -328,8 +387,11 @@ $("ncgo").onclick = async () => {
     const m = acc.match(/```(?:html)?\s*\n([\s\S]*?)(?:```|$)/);
     ncCode = (m ? m[1] : acc).trim();
     o.textContent = ncCode + (cut ? "\n\n<!-- El código se cortó por el límite del modelo. Pídeme algo más sencillo. -->" : "");
-    $("ncbtns").style.display = "flex";
-  } catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
+    $("ncbtns").style.display = "flex"; $("ncrun").click();
+  } catch (e2) {
+    if (/dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e2 && e2.message) || e2))) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
+    else { o.textContent = "No he podido crear eso. Prueba con algo más corto o más sencillo."; }
+  }
   busy = false;
 };
 
@@ -356,28 +418,37 @@ f.onsubmit = async e => {
   history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
   const ctx = pic ? "" : await lookup(t);
-  const ask = async () => {
+  const isGpu = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
+  const ask = async lite => {
     acc = "";
-    const msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+    let msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+    if (lite) msgs = msgs.slice(-1);
+    let used = 0; const keep = [];
+    for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
+    msgs = keep;
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
-    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + (ctx ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx : "") }, ...msgs], stream: true, temperature: 0.4, max_tokens: 400 });
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + (ctx && !lite ? "\n\nInformación de Wikipedia (úsala si es relevante):\n" + ctx.slice(0, 600) : "") }, ...msgs], stream: true, temperature: 0.4, max_tokens: 400 });
     for await (const ch of s) {
       acc += ch.choices[0]?.delta?.content || ""; out.textContent = acc; chat.scrollTop = chat.scrollHeight;
     }
   };
+  const SORRY = "Uy, no he sabido responder a eso 😅. ¿Me lo preguntas de otra forma o con menos palabras?";
   try {
     try { await ask(); }
     catch (e1) {
-      out.textContent = "Reiniciando el motor, un momento…";
-      try { await engine.unload(); } catch (e) {}
-      engine = await mk(() => {});
-      out.textContent = "…";
-      await ask();
+      if (isGpu(e1)) {
+        out.textContent = "Reiniciando el motor, un momento…";
+        try { await engine.unload(); } catch (e) {}
+        engine = await mk(() => {});
+        out.textContent = "…"; await ask();
+      } else { out.textContent = "…"; await ask(true); }
     }
+    if (!acc.trim()) { acc = SORRY; out.textContent = acc; }
     history.push({ role: "assistant", content: acc }); save();
     if (speak) say(acc);
   } catch (err) {
-    out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; failReload();
+    if (isGpu(err)) { out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; failReload(); }
+    else { out.textContent = SORRY; history.push({ role: "assistant", content: SORRY }); save(); }
   }
   busy = false;
 };
