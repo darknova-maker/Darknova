@@ -120,6 +120,7 @@ function add(text, cls, pic) {
 function showChat() {
   $("setup").remove(); f.style.display = "flex"; $("clear").hidden = false; $("tabs").style.display = "flex";
   try { history = JSON.parse(localStorage.getItem("dn-history") || "[]"); } catch (e) { history = []; }
+  if (history.length && history[history.length - 1].role === "user") { const l = history.pop(); save(); q.value = l.content.replace(/^📷 /, ""); }
   if (!history.length) add("Hola, soy DarkNova AI, creada por Saúl Arce. ¿En qué te ayudo?", "a");
   history.forEach(m => add(m.content, m.role === "user" ? "u" : "a"));
 }
@@ -209,7 +210,7 @@ $("trgo").onclick = async () => {
     let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
   };
   try { try { await go(); } catch (e1) { o.textContent = "Reiniciando el motor…"; try { await engine.unload(); } catch (e) {} engine = await mk(() => {}); await go(); } }
-  catch (e2) { o.textContent = "No pude traducir. Cierra la app y ábrela otra vez."; }
+  catch (e2) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; setTimeout(() => location.reload(), 1500); }
   busy = false;
 };
 
@@ -256,7 +257,7 @@ f.onsubmit = async e => {
     }
     history.push({ role: "assistant", content: acc }); save();
   } catch (err) {
-    out.textContent = "No pude reiniciar el motor. Cierra la app del todo, ábrela otra vez y toca Descargar y empezar. (" + (err.message || err) + ")";
+    out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; setTimeout(() => location.reload(), 1500);
   }
   busy = false;
 };
