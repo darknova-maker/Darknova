@@ -121,7 +121,6 @@ form .go{padding:10px 18px;font-size:16px}
   <small id="onnote">Usa un servicio de IA gratuito en internet. Tus mensajes se envían a ese servicio. Si lo apagas, todo se queda en tu móvil.</small>
   <input id="uname" placeholder="Tu nombre (opcional)" maxlength="30">
   <select id="ulen"><option value="b">Respuestas breves</option><option value="n">Respuestas normales</option><option value="d">Respuestas detalladas</option></select>
-  <button id="lrn" type="button">🧠 Lo que he aprendido (0)</button>
   <div id="dlist"></div>
 </aside></div>
 <script type="module">
@@ -342,7 +341,7 @@ async function onlineChat(messages, max, models) {
       if (!r.ok) throw new Error("http " + r.status);
       const j = await r.json();
       const t = cleanAd(((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").trim());
-      if (t) return t;
+      if (t) { usedOnline = true; return t; }
     } catch (e) { last = e; if (stopped) throw e; }
   }
   try {
@@ -352,7 +351,7 @@ async function onlineChat(messages, max, models) {
     const r2 = await fetch("https://text.pollinations.ai/" + encodeURIComponent(conv) + "?model=openai&system=" + encodeURIComponent(sys), { signal: ctrl2.signal });
     clearTimeout(id2);
     const t2 = cleanAd((await r2.text()).trim());
-    if (r2.ok && t2) return t2;
+    if (r2.ok && t2) { usedOnline = true; return t2; }
     throw new Error("http " + r2.status);
   } catch (e) { last = e; }
   throw last || new Error("sin respuesta");
@@ -376,12 +375,24 @@ function relevant(t) {
   return getL().map(l => { const lw = wordsOf(l.q); let n = 0; w.forEach(x => { if (lw.has(x)) n++; }); return { l, n, sc: n / Math.max(w.size, lw.size, 1) }; })
     .filter(x => x.n >= 2 || x.sc >= 0.6).sort((a, b) => b.sc - a.sc).slice(0, 3);
 }
-function learn(q, a) {
+function learn(q, a, auto) {
   if (!q || !a) return;
-  const list = getL().filter(l => { const r = relevant(q).find(x => x.l === l); return !(r && r.sc >= 0.8); });
-  list.push({ q: q.slice(0, 200), a: a.slice(0, 500), ts: Date.now() }); putL(list);
+  const key = l => l.q + "|" + l.ts, near = new Set(relevant(q).filter(x => x.sc >= 0.8).map(x => key(x.l)));
+  const sim = getL().filter(l => near.has(key(l)));
+  if (auto && sim.some(l => !l.auto)) return;
+  const list = getL().filter(l => !near.has(key(l)));
+  list.push({ q: q.slice(0, 200), a: a.slice(0, 500), ts: Date.now(), auto: !!auto });
+  putL([...list.filter(l => !l.auto), ...list.filter(l => l.auto).slice(-50)]);
 }
-const lessonsText = t => { const r = relevant(t); return r.length ? "\n\nDatos corregidos por el usuario (son verdad; si vienen al caso, úsalos con tus propias palabras y sin decir que te corrigieron): " + r.map(x => "P: " + x.l.q + " R: " + x.l.a).join(" | ") : ""; };
+const lessonsText = t => {
+  const r = relevant(t); if (!r.length) return "";
+  const c = r.filter(x => !x.l.auto), au = r.filter(x => x.l.auto);
+  return (c.length ? "\n\nDatos corregidos por el usuario (son verdad; si vienen al caso, úsalos con tus propias palabras y sin decir que te corrigieron): " + c.map(x => "P: " + x.l.q + " R: " + x.l.a.slice(0, 300)).join(" | ") : "")
+    + (au.length ? "\n\nRespuestas anteriores que puedes reutilizar si siguen siendo correctas: " + au.map(x => "P: " + x.l.q + " R: " + x.l.a.slice(0, 250)).join(" | ") : "");
+};
+const NEG = /^(no|mal|incorrecto|falso|error|te equivocas|estas equivocad[oa]|eso (es|esta) (mal|falso|incorrecto|erroneo)|esta mal|no es (asi|verdad|correcto|eso)|eso no es (asi|verdad|correcto)|no me has entendido|no tiene sentido)[\s,.!]*$/;
+let pendingFix = null;
+const CORRHINT2 = "\n\nEl usuario dice que te equivocaste. Pide perdón con una frase breve y pregúntale cuál es la respuesta correcta para aprenderla.";
 const CORR = /^(no[,.!]|no es |no era |te equivocas|estas equivocad|eso (es|esta) (mal|falso|incorrecto)|en realidad|la respuesta correcta|es incorrecto|se dice |se escribe )/;
 const CTXH = "\n\nInformación encontrada en internet (puede no ser relevante; si responde a la pregunta, básate en ella; si no basta, di que no lo sabes y no inventes):\n";
 const CORRHINT = "\n\nEl usuario te está corrigiendo. Reconoce el error con una frase breve y amable, sin copiar su mensaje, y vuelve a responder la pregunta anterior de forma correcta, con tus propias palabras, usando la corrección.";
@@ -391,7 +402,7 @@ function sysExtra() {
   const now = new Date().toLocaleString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   return " " + (LEN[ln] || LEN.b) + " Hoy es " + now + "." + (nm ? " El usuario se llama " + nm + "; llámale por su nombre de vez en cuando." : "") + (getM().length ? " Cosas que recuerdas del usuario: " + getM().join("; ") + "." : "");
 }
-let curCtrl = null, stopped = false;
+let curCtrl = null, stopped = false, usedOnline = false;
 function stopGen() { stopped = true; try { engine.interruptGenerate(); } catch (e) {} try { if (curCtrl) curCtrl.abort(); } catch (e) {} }
 const mkBtn = (t, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = fn; return b; };
 function md(el, text) {
@@ -410,7 +421,6 @@ function addActions(d, last) {
   const row = document.createElement("div"); row.className = "act";
   const cp = mkBtn("📋 Copiar", () => { try { navigator.clipboard.writeText(d.dataset.raw || d.textContent); cp.textContent = "✓ Copiado"; setTimeout(() => { cp.textContent = "📋 Copiar"; }, 1200); } catch (e) {} });
   row.appendChild(cp);
-  if (d.dataset.q) { const fx = mkBtn("✏️ Corregir", () => { const a = prompt("¿Cuál es la respuesta correcta? La guardaré para no fallar otra vez.", ""); if (a && a.trim()) { learn(d.dataset.q, a.trim()); fx.textContent = "✓ Aprendido"; } }); row.appendChild(fx); }
   if (last) { const rg = mkBtn("🔄 Otra respuesta", regen); rg.className = "rg"; row.appendChild(rg); }
   d.after(row);
 }
@@ -596,15 +606,25 @@ async function lookup(t, status) {
 f.onsubmit = async e => {
   e.preventDefault();
   const t = q.value.trim(); if ((!t && !img) || busy || (!engine && !ONL())) return;
-  busy = true; stopped = false; genOn(); $("send").textContent = "■ Parar"; q.value = ""; const pic = img; img = null; note.style.display = "none";
+  busy = true; stopped = false; usedOnline = false; genOn(); $("send").textContent = "■ Parar"; q.value = ""; const pic = img; img = null; note.style.display = "none";
   const shown = t || "Mira esta foto";
   add(shown, "u", pic);
   if (memCheck(shown)) flash("🧠 Lo recordaré.");
-  let corrNow = false;
-  if (CORR.test(norm(shown)) && history.length && history[history.length - 1].role === "assistant") {
+  if (/^(olvida|borra)\s+(todo|todo lo (que has )?aprendido|lo que (has )?aprendido)/.test(norm(shown))) { putL([]); putM([]); flash("🧠 Lo he olvidado todo."); }
+  let corrNow = false, corrHint = CORRHINT;
+  const lastA = history.length > 0 && history[history.length - 1].role === "assistant";
+  const pqm = [...history].reverse().find(m => m.role === "user");
+  const pqText = pqm ? pqm.content.replace(/^📷 /, "") : "";
+  const isQ = /\?|^(que|quien|quienes|cual|cuales|cuando|donde|como|cuanto|cuanta|cuantos|por que)\b/.test(norm(shown));
+  if (pendingFix) {
+    if (!isQ && shown.split(/\s+/).length >= 2) { learn(pendingFix, shown); corrNow = true; flash("🧠 Aprendido."); }
+    pendingFix = null;
+  } else if (lastA && pqText && NEG.test(norm(shown))) {
+    corrNow = true; pendingFix = pqText; corrHint = CORRHINT2;
+  } else if (lastA && pqText && CORR.test(norm(shown))) {
     corrNow = true;
-    const pq = [...history].reverse().find(m => m.role === "user");
-    if (pq) { learn(pq.content.replace(/^📷 /, ""), shown.replace(/^no[,.!]\s*/i, "")); flash("🧠 Corrección guardada para no fallar otra vez."); }
+    const body = shown.replace(/^no[,.!]\s*/i, "");
+    if (body.split(/\s+/).length > 3) { learn(pqText, body); flash("🧠 Aprendido."); } else { pendingFix = pqText; corrHint = CORRHINT2; }
   }
   history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
@@ -618,12 +638,12 @@ f.onsubmit = async e => {
     for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
     msgs = keep;
     if (ONL() && !pic && !lite) {
-      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? CORRHINT : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs]); md(out, acc); return; }
+      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs]); md(out, acc); return; }
       catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } out.textContent = "El modo online falló (" + String((eo && eo.message) || eo).slice(0, 60) + "). Uso el modo local…"; }
     }
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
     await ensureEngine(p => { out.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
-    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? CORRHINT : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400 });
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400 });
     for await (const ch of s) {
       acc += ch.choices[0]?.delta?.content || ""; md(out, acc); chat.scrollTop = chat.scrollHeight;
     }
@@ -641,6 +661,7 @@ f.onsubmit = async e => {
     }
     if (!acc.trim()) { acc = stopped ? "⏹ Detenido." : SORRY; md(out, acc); }
     history.push({ role: "assistant", content: acc }); save();
+    if (usedOnline && !corrNow && acc.length > 25 && acc.length < 700 && /\?|^(que|quien|quienes|cual|cuales|cuando|donde|como|cuanto|cuanta|cuantos|por que)\b|\b(explica|explicame|dime|significa|informacion)\b/.test(norm(shown)) && !/no se |no lo se|no estoy segur|no tengo informacion/.test(norm(acc))) learn(shown, acc, true);
     out.dataset.q = shown; addActions(out, true);
     if (lastSrc.length && out.nextSibling) { const sp = document.createElement("small"); sp.textContent = "🔎 " + lastSrc.join(" · "); out.nextSibling.appendChild(sp); }
     if (speak) say(acc);
@@ -688,10 +709,6 @@ paintSub();
 $("dsearch").oninput = drawList; $("dnew").onclick = newChat; $("clear").onclick = newChat;
 window.addEventListener("pagehide", save);
 paintL();
-$("lrn").onclick = () => {
-  const L = getL(), M = getM(); if (!L.length && !M.length) { alert("Aún no he aprendido nada. Dime «Recuerda que…», toca ✏️ Corregir en una respuesta, o corrígeme escribiendo «No, es…»."); return; }
-  if (confirm("Recuerdo " + M.length + " datos tuyos y " + L.length + " correcciones.\n\n" + M.slice(-3).map(x => "• " + x).join("\n") + (L.length ? "\n" + L.slice(-3).map(l => "• " + l.q + " → " + l.a).join("\n") : "") + "\n\n¿Quieres borrarlo todo?")) { putL([]); putM([]); }
-};
 try { $("uname").value = localStorage.getItem("dn-name") || ""; $("ulen").value = localStorage.getItem("dn-len") || "b"; } catch (e) {}
 $("uname").oninput = () => { try { localStorage.setItem("dn-name", $("uname").value.trim()); } catch (e) {} };
 $("ulen").onchange = () => { try { localStorage.setItem("dn-len", $("ulen").value); } catch (e) {} };
