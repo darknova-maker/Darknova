@@ -66,7 +66,7 @@ form .go{padding:10px 18px;font-size:16px}
 .cb{background:#0a0820;border:1px solid var(--line);border-radius:10px;padding:8px;margin:6px 0;overflow-x:auto;white-space:pre;font:12px/1.4 ui-monospace,Menlo,monospace}
 .m code{background:#0a0820;border-radius:6px;padding:1px 5px;font:13px ui-monospace,Menlo,monospace}
 .sug{display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;margin:4px 0}.sug button{border-radius:16px;padding:8px 12px;font-size:14px}
-#uname,#ulen{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+#uname,#ulen,#umod{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
 </style>
 </head>
 <body>
@@ -119,6 +119,8 @@ form .go{padding:10px 18px;font-size:16px}
   <button class="go" id="dnew" type="button">+ Nuevo chat</button>
   <label id="onrow"><input type="checkbox" id="onl"><span>🌐 Modo online (más lista)</span></label>
   <small id="onnote">Usa un servicio de IA gratuito en internet. Tus mensajes se envían a ese servicio. Si lo apagas, todo se queda en tu móvil.</small>
+  <select id="umod"><option value="0">Modelo local: Grande (más lista, puede cerrar la app)</option><option value="1">Modelo local: Ligero (recomendado)</option><option value="2">Modelo local: Muy ligero (gasta menos)</option></select>
+  <small id="diag" style="color:var(--mute);font-size:12px;white-space:pre-wrap"></small>
   <input id="uname" placeholder="Tu nombre (opcional)" maxlength="30">
   <select id="ulen"><option value="b">Respuestas breves</option><option value="n">Respuestas normales</option><option value="d">Respuestas detalladas</option></select>
   <div id="dlist"></div>
@@ -134,12 +136,14 @@ async function loadLib() {
 const MODELS = ["Llama-3.2-1B-Instruct-q4f32_1-MLC", "Qwen2.5-0.5B-Instruct-q4f32_1-MLC", "SmolLM2-360M-Instruct-q4f32_1-MLC"];
 let mi = 0;
 try {
-  mi = Number(localStorage.getItem("dn-mi") || 0) || 0;
+  mi = Number(localStorage.getItem("dn-mi") || 1);
+  if (localStorage.getItem("dn-v") !== "3") { mi = Math.max(mi, 1); localStorage.setItem("dn-mi", String(mi)); localStorage.setItem("dn-v", "3"); }
   if (localStorage.getItem("dn-gen") === "1") { mi = Math.min(mi + 1, MODELS.length - 1); localStorage.setItem("dn-mi", String(mi)); localStorage.setItem("dn-down", "1"); localStorage.removeItem("dn-gen"); }
 } catch (e) {}
 const MODEL = MODELS[Math.min(mi, MODELS.length - 1)];
 const GPUERR = /dispos|device (was )?lost|compatible GPU|GPUDevice|requestAdapter|no adapter/i;
 const fe = m => Object.assign(new Error(m), { friendly: true });
+function noteErr(e) { try { localStorage.setItem("dn-lasterr", new Date().toLocaleTimeString("es") + " · " + String((e && e.message) || e).slice(0, 140)); } catch (x) {} }
 const genOn = () => { try { localStorage.setItem("dn-gen", "1"); } catch (e) {} };
 const genOff = () => { try { localStorage.removeItem("dn-gen"); } catch (e) {} };
 const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Antes de contestar, asegúrate de que tu respuesta tiene sentido y responde justo a lo que se pregunta. Nunca inventes datos, fechas ni nombres: si no estás segura, dilo. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve.";
@@ -148,7 +152,7 @@ const chat = $("chat"), f = $("f"), q = $("q"), st = $("st"), bar = $("bar");
 let engine, webllm, history = [], busy = false;
 const VISION = "Phi-3.5-vision-instruct-q4f32_1-MLC";
 let cur = MODEL;
-const mk = async cb => { if (!webllm) webllm = await loadLib(); return webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 2048 }); };
+const mk = async cb => { if (!webllm) webllm = await loadLib(); return webllm.CreateMLCEngine(cur, { initProgressCallback: cb }, { context_window_size: cur === VISION ? 4096 : 1536 }); };
 let loadingEng = null;
 async function ensureEngine(cb) {
   if (engine) return engine;
@@ -524,7 +528,7 @@ async function autoFix(err) {
 }
 window.addEventListener("message", ev => { if (ev.source === $("ncframe").contentWindow && ev.data && ev.data.dnErr) autoFix(String(ev.data.dnErr)); });
 let ncRun = false, trRun = false;
-const isGpuErr = e => GPUERR.test(String((e && e.message) || e));
+const isGpuErr = e => { const r = GPUERR.test(String((e && e.message) || e)); if (r) noteErr(e); return r; };
 $("ncgo").onclick = async () => {
   if (ncRun) { stopGen(); return; }
   const t = $("ncin").value.trim(); if (!t || busy || false) return;
@@ -541,7 +545,7 @@ $("ncgo").onclick = async () => {
     acc = ""; cut = false;
     if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { if (stopped) return; throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); o.textContent = "El modo online falló. Uso el modo local…"; } }
     await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
-    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 1600, frequency_penalty: 0.5, stop: ["</html>"] });
+    const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 900, frequency_penalty: 0.5, stop: ["</html>"] });
     for await (const ch of r) {
       acc += ch.choices[0]?.delta?.content || ""; if (ch.choices[0]?.finish_reason === "length") cut = true;
       o.textContent = acc; o.scrollTop = o.scrollHeight;
@@ -650,13 +654,13 @@ async function submitChat(e) {
   history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
   const ctx = pic ? "" : await lookup(t, m => { out.textContent = m; });
-  const isGpu = e => GPUERR.test(String((e && e.message) || e));
+  const isGpu = e => isGpuErr(e);
   const ask = async lite => {
     acc = "";
     let msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
     if (lite) msgs = msgs.slice(-1);
     let used = 0; const keep = [];
-    for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
+    for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > (ONL() ? 2600 : 1400) && keep.length) break; keep.unshift(msgs[i]); }
     msgs = keep;
     if (ONL() && !lite) {
       try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs], 700, undefined, a => { out.textContent = "⏳ El servicio online está ocupado, reintentando (" + a + "/3)…"; }); md(out, acc); return; }
@@ -665,7 +669,7 @@ async function submitChat(e) {
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
     if (pic && cur !== VISION) throw fe("Sin conexión no puedo ver fotos con la IA local sin bajar el modelo grande (4 GB). Activa el modo online o inténtalo con conexión.");
     await ensureEngine(p => { out.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
-    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400, frequency_penalty: 0.4, presence_penalty: 0.1 });
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx && !lite ? CTXH + ctx.slice(0, 700) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400, frequency_penalty: 0.4, presence_penalty: 0.1 });
     for await (const ch of s) {
       acc += ch.choices[0]?.delta?.content || ""; if (loops(acc)) { try { engine.interruptGenerate(); } catch (e) {} acc = trimLoop(acc); md(out, acc); break; } md(out, acc); chat.scrollTop = chat.scrollHeight;
     }
@@ -722,7 +726,10 @@ function newChat() {
   if (history.length) { curId = newId(); history = []; persist(); }
   renderChat(); showTab("c"); closeDrawer(); q.value = "";
 }
-$("menu").onclick = () => { save(); drawer.style.display = "block"; $("dsearch").value = ""; drawList(); };
+$("menu").onclick = () => {
+  let le = ""; try { le = localStorage.getItem("dn-lasterr") || ""; } catch (e) {}
+  $("diag").textContent = "Modelo local en uso: " + MODEL.replace(/-MLC$/, "") + (le ? "\nÚltimo fallo de la IA: " + le : "");
+  save(); drawer.style.display = "block"; $("dsearch").value = ""; drawList(); };
 $("dclose").onclick = closeDrawer; $("dback").onclick = closeDrawer;
 $("onl").onchange = () => {
   if ($("onl").checked && !confirm("El modo online hace a DarkNova mucho más lista, pero tus mensajes se envían a un servicio de IA gratuito en internet. ¿Activarlo?")) { $("onl").checked = false; return; }
@@ -730,6 +737,12 @@ $("onl").onchange = () => {
   setOnline($("onl").checked);
 };
 paintSub();
+$("umod").value = String(Math.min(mi, MODELS.length - 1));
+$("umod").onchange = () => {
+  try { localStorage.setItem("dn-mi", $("umod").value); sessionStorage.setItem("dn-keep", "1"); } catch (e) {}
+  try { if (engine) engine.unload(); } catch (e) {}
+  save(); location.reload();
+};
 $("dsearch").oninput = drawList; $("dnew").onclick = newChat; $("clear").onclick = newChat;
 window.addEventListener("pagehide", save);
 paintL();
@@ -752,6 +765,7 @@ q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.p
 window.addEventListener("unhandledrejection", e => { if (document.getElementById("setup")) st.textContent = "Error: " + String((e.reason && e.reason.message) || e.reason).slice(0, 140); });
 $("start").style.display = "none"; startApp();
 setTimeout(() => { if (document.getElementById("setup")) st.textContent += " (Tarda más de lo normal. Si no avanza, cierra la app y ábrela otra vez.)"; }, 25000);
+window.addEventListener("error", e => noteErr(e.error || e.message));
 </script>
 </body>
 </html>
