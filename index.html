@@ -527,7 +527,7 @@ let ncRun = false, trRun = false;
 const isGpuErr = e => GPUERR.test(String((e && e.message) || e));
 $("ncgo").onclick = async () => {
   if (ncRun) { stopGen(); return; }
-  const t = $("ncin").value.trim(); if (!t || busy || (!engine && !ONL())) return;
+  const t = $("ncin").value.trim(); if (!t || busy || false) return;
   const key = pick(t);
   if (key) {
     ncTries = 9; ncCode = TPL[key](); const o2 = $("ncout"); o2.style.display = "block"; o2.textContent = ncCode;
@@ -566,7 +566,7 @@ $("ncgo").onclick = async () => {
 };
 $("trgo").onclick = async () => {
   if (trRun) { stopGen(); return; }
-  const t = $("trin").value.trim(); if (!t || busy || (!engine && !ONL())) return;
+  const t = $("trin").value.trim(); if (!t || busy || false) return;
   busy = true; trRun = true; stopped = false; genOn(); $("trgo").textContent = "■ Cancelar"; const o = $("trout"); o.textContent = "…";
   const sysT = "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada.";
   const go = async () => {
@@ -624,9 +624,9 @@ async function lookup(t, status) {
   return items.map(i => "(" + i.src + ") " + i.txt).join("\n");
 }
 
-f.onsubmit = async e => {
+async function submitChat(e) {
   e.preventDefault();
-  const t = q.value.trim(); if ((!t && !img) || busy || (!engine && !ONL())) return;
+  const t = q.value.trim(); if ((!t && !img) || busy || false) return;
   busy = true; stopped = false; usedOnline = false; genOn(); $("send").textContent = "■ Parar"; q.value = ""; const pic = img; img = null; note.style.display = "none";
   const shown = t || "Mira esta foto";
   add(shown, "u", pic);
@@ -692,7 +692,8 @@ f.onsubmit = async e => {
     else { const M = err && err.friendly ? err.message : SORRY; out.textContent = M; history.push({ role: "assistant", content: M }); save(); }
   }
   busy = false; genOff(); $("send").textContent = "Enviar";
-};
+}
+f.onsubmit = e => { submitChat(e).catch(err => { busy = false; genOff(); $("send").textContent = "Enviar"; }); };
 
 const drawer = $("drawer");
 const closeDrawer = () => { drawer.style.display = "none"; };
