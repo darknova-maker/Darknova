@@ -138,6 +138,8 @@ try {
   if (localStorage.getItem("dn-gen") === "1") { mi = Math.min(mi + 1, MODELS.length - 1); localStorage.setItem("dn-mi", String(mi)); localStorage.setItem("dn-down", "1"); localStorage.removeItem("dn-gen"); }
 } catch (e) {}
 const MODEL = MODELS[Math.min(mi, MODELS.length - 1)];
+const GPUERR = /dispos|device (was )?lost|compatible GPU|GPUDevice|requestAdapter|no adapter/i;
+const fe = m => Object.assign(new Error(m), { friendly: true });
 const genOn = () => { try { localStorage.setItem("dn-gen", "1"); } catch (e) {} };
 const genOff = () => { try { localStorage.removeItem("dn-gen"); } catch (e) {} };
 const SYSTEM = "Eres DarkNova AI, una inteligencia artificial creada por Saúl Arce. Cuando te presentes o te pregunten quién eres, di siempre que eres DarkNova AI y que fuiste creada por Saúl Arce. No inventes nada sobre Saúl Arce: solo sabes que es quien te creó. Habla de ti siempre en femenino. Eres simpática, alegre y cercana: tono amable y positivo, con algún emoji de vez en cuando. Responde en el idioma del usuario, con un español correcto y natural, sin inventar palabras. Antes de contestar, asegúrate de que tu respuesta tiene sentido y responde justo a lo que se pregunta. Nunca inventes datos, fechas ni nombres: si no estás segura, dilo. Si recibes información de Wikipedia, úsala como base de tu respuesta. Sabes traducir palabras y frases entre idiomas: da primero la traducción y, si hace falta, una nota muy breve.";
@@ -150,7 +152,7 @@ const mk = async cb => { if (!webllm) webllm = await loadLib(); return webllm.Cr
 let loadingEng = null;
 async function ensureEngine(cb) {
   if (engine) return engine;
-  if (!navigator.gpu) throw new Error("Sin conexión y este móvil no permite la IA local.");
+  if (!navigator.gpu) throw fe("Sin conexión y este móvil no permite la IA local.");
   if (!loadingEng) loadingEng = (async () => { genOn(); try { engine = await mk(cb || (() => {})); } finally { genOff(); loadingEng = null; } return engine; })();
   return loadingEng;
 }
@@ -219,6 +221,7 @@ function failReload() {
   try {
     const now = Date.now(), n = JSON.parse(localStorage.getItem("dn-fails") || "[]").filter(x => now - x < 180000); n.push(now);
     localStorage.setItem("dn-fails", JSON.stringify(n));
+    if (n.length > 3) { flash("No consigo reiniciar la IA. Cierra la app del todo y ábrela otra vez; si sigue igual, usa el modo online en ☰."); localStorage.setItem("dn-fails", "[]"); return; }
     if (n.length >= 3) { localStorage.setItem("dn-mi", String(Math.min(mi + 1, MODELS.length - 1))); localStorage.setItem("dn-down", "1"); localStorage.setItem("dn-fails", "[]"); }
   } catch (e) {}
   try { sessionStorage.setItem("dn-keep", "1"); } catch (e) {}
@@ -517,7 +520,7 @@ async function autoFix(err) {
 }
 window.addEventListener("message", ev => { if (ev.source === $("ncframe").contentWindow && ev.data && ev.data.dnErr) autoFix(String(ev.data.dnErr)); });
 let ncRun = false, trRun = false;
-const isGpuErr = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
+const isGpuErr = e => GPUERR.test(String((e && e.message) || e));
 $("ncgo").onclick = async () => {
   if (ncRun) { stopGen(); return; }
   const t = $("ncin").value.trim(); if (!t || busy || (!engine && !ONL())) return;
@@ -532,7 +535,7 @@ $("ncgo").onclick = async () => {
   let acc = "", cut = false;
   const go = async () => {
     acc = ""; cut = false;
-    if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { if (stopped) return; o.textContent = "El modo online falló (" + String((eo && eo.message) || eo).slice(0, 60) + "). Uso el modo local…"; } }
+    if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { if (stopped) return; if (!engine) throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); o.textContent = "El modo online falló. Uso el modo local…"; } }
     await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 1600, frequency_penalty: 0.5, stop: ["</html>"] });
     for await (const ch of r) {
@@ -553,7 +556,7 @@ $("ncgo").onclick = async () => {
     }
   } catch (e2) {
     if (isGpuErr(e2)) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
-    else { o.textContent = "No he podido crear eso. Prueba con algo más corto o más sencillo."; }
+    else { o.textContent = e2 && e2.friendly ? e2.message : "No he podido crear eso. Prueba con algo más corto o más sencillo."; }
   }
   busy = false; ncRun = false; genOff(); $("ncgo").textContent = "Crear código";
 };
@@ -563,7 +566,7 @@ $("trgo").onclick = async () => {
   busy = true; trRun = true; stopped = false; genOn(); $("trgo").textContent = "■ Cancelar"; const o = $("trout"); o.textContent = "…";
   const sysT = "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada.";
   const go = async () => {
-    if (ONL()) { try { o.textContent = await onlineChat([{ role: "system", content: sysT }, { role: "user", content: t }], 700, ["openai"]); return; } catch (eo) { if (stopped) return; } }
+    if (ONL()) { try { o.textContent = await onlineChat([{ role: "system", content: sysT }, { role: "user", content: t }], 700, ["openai"]); return; } catch (eo) { if (stopped) return; if (!engine) throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); } }
     await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: sysT }, { role: "user", content: t }], stream: true, temperature: 0.1, max_tokens: 700 });
     let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
@@ -572,7 +575,7 @@ $("trgo").onclick = async () => {
     if (stopped) o.textContent += (o.textContent === "…" ? "" : "\n") + "⏹ Cancelado.";
   } catch (e2) {
     if (isGpuErr(e2)) { o.textContent = "El iPhone pausó la IA. Reiniciando la app…"; failReload(); }
-    else { o.textContent = "No pude traducir eso. Inténtalo con un texto más corto."; }
+    else { o.textContent = e2 && e2.friendly ? e2.message : "No pude traducir eso. Inténtalo con un texto más corto."; }
   }
   busy = false; trRun = false; genOff(); $("trgo").textContent = "Traducir";
 };
@@ -643,7 +646,7 @@ f.onsubmit = async e => {
   history.push({ role: "user", content: (pic ? "📷 " : "") + shown }); save();
   const out = add("…", "a"); let acc = "";
   const ctx = pic ? "" : await lookup(t, m => { out.textContent = m; });
-  const isGpu = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
+  const isGpu = e => GPUERR.test(String((e && e.message) || e));
   const ask = async lite => {
     acc = "";
     let msgs = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
@@ -653,10 +656,10 @@ f.onsubmit = async e => {
     msgs = keep;
     if (ONL() && !lite) {
       try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs]); md(out, acc); return; }
-      catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } out.textContent = "El modo online falló (" + String((eo && eo.message) || eo).slice(0, 60) + "). Uso el modo local…"; }
+      catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } if (!engine) throw fe("El servicio online no respondió (" + String((eo && eo.message) || eo).slice(0, 50) + "). Inténtalo otra vez, o desactiva el modo online en ☰ para usar la IA del móvil."); out.textContent = "El modo online falló. Uso el modo local…"; }
     }
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
-    if (pic && cur !== VISION) throw new Error("Sin conexión no puedo ver fotos con la IA local sin bajar el modelo grande (4 GB). Activa el modo online o inténtalo con conexión.");
+    if (pic && cur !== VISION) throw fe("Sin conexión no puedo ver fotos con la IA local sin bajar el modelo grande (4 GB). Activa el modo online o inténtalo con conexión.");
     await ensureEngine(p => { out.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400, frequency_penalty: 0.4, presence_penalty: 0.1 });
     for await (const ch of s) {
@@ -672,7 +675,7 @@ f.onsubmit = async e => {
         try { await engine.unload(); } catch (e) {}
         engine = await mk(() => {});
         out.textContent = "…"; await ask();
-      } else { out.textContent = "…"; await ask(true); }
+      } else if (e1 && e1.friendly) { throw e1; } else { out.textContent = "…"; await ask(true); }
     }
     if (!acc.trim()) { acc = stopped ? "⏹ Detenido." : SORRY; md(out, acc); }
     history.push({ role: "assistant", content: acc }); save();
@@ -682,7 +685,7 @@ f.onsubmit = async e => {
     if (speak) say(acc);
   } catch (err) {
     if (isGpu(err)) { out.textContent = "El iPhone pausó la IA. Reiniciando la app, tu mensaje te espera…"; failReload(); }
-    else { const M = /IA local/.test(String(err && err.message)) ? err.message : SORRY; out.textContent = M; history.push({ role: "assistant", content: M }); save(); }
+    else { const M = err && err.friendly ? err.message : SORRY; out.textContent = M; history.push({ role: "assistant", content: M }); save(); }
   }
   busy = false; genOff(); $("send").textContent = "Enviar";
 };
