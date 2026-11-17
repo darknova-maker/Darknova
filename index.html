@@ -331,31 +331,35 @@ let online = false;
 try { online = localStorage.getItem("dn-online") === "1"; } catch (e) {}
 const ONL = () => online && navigator.onLine;
 const paintSub = () => { $("sub").textContent = "Creada por Saúl Arce · " + (online ? "modo online 🌐" : "modo local 📱"); $("onl").checked = online; };
-const setOnline = v => { online = v; try { localStorage.setItem("dn-online", v ? "1" : "0"); } catch (e) {} paintSub(); };
+const setOnline = v => { online = v; try { localStorage.setItem("dn-online", v ? "1" : "0"); } catch (e) {} paintSub(); if (v && engine) { const e0 = engine; engine = null; try { e0.unload(); } catch (e) {} } };
 const cleanAd = t => t.replace(/\n*\W*Powered by Pollinations[\s\S]*$/i, "").replace(/\n*\W*Support our mission[\s\S]*$/i, "").trim();
-async function onlineChat(messages, max, models) {
+async function onlineChat(messages, max, models, onWait) {
   let last;
-  for (const model of models || ["openai"]) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt) { if (stopped) throw last; if (onWait) onWait(attempt); await new Promise(r => setTimeout(r, 3000 * attempt)); if (stopped) throw last; }
+    for (const model of models || ["openai"]) {
+      try {
+        const ctrl = (curCtrl = new AbortController()), id = setTimeout(() => ctrl.abort(), 20000);
+        const r = await fetch("https://text.pollinations.ai/openai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: max || 600 }), signal: ctrl.signal });
+        clearTimeout(id);
+        if (!r.ok) throw new Error("http " + r.status);
+        const j = await r.json();
+        const t = cleanAd(((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").trim());
+        if (t) { usedOnline = true; return t; }
+        throw new Error("respuesta vacía");
+      } catch (e) { last = e; if (stopped) throw e; }
+    }
     try {
-      const ctrl = (curCtrl = new AbortController()), id = setTimeout(() => ctrl.abort(), 25000);
-      const r = await fetch("https://text.pollinations.ai/openai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: max || 600 }), signal: ctrl.signal });
-      clearTimeout(id);
-      if (!r.ok) throw new Error("http " + r.status);
-      const j = await r.json();
-      const t = cleanAd(((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").trim());
-      if (t) { usedOnline = true; return t; }
+      const sys = messages.filter(m => m.role === "system").map(m => m.content).join(" ").slice(0, 700);
+      const conv = messages.filter(m => m.role !== "system").slice(-4).map(m => (typeof m.content === "string" ? (m.role === "user" ? "Usuario: " : "DarkNova: ") + m.content : "Usuario: (foto)")).join("\n").slice(-1200);
+      const ctrl2 = (curCtrl = new AbortController()), id2 = setTimeout(() => ctrl2.abort(), 20000);
+      const r2 = await fetch("https://text.pollinations.ai/" + encodeURIComponent(conv) + "?model=openai&system=" + encodeURIComponent(sys), { signal: ctrl2.signal });
+      clearTimeout(id2);
+      const t2 = cleanAd((await r2.text()).trim());
+      if (r2.ok && t2) { usedOnline = true; return t2; }
+      throw new Error("http " + r2.status);
     } catch (e) { last = e; if (stopped) throw e; }
   }
-  try {
-    const sys = messages.filter(m => m.role === "system").map(m => m.content).join(" ").slice(0, 700);
-    const conv = messages.filter(m => m.role !== "system").slice(-4).map(m => (m.role === "user" ? "Usuario: " : "DarkNova: ") + m.content).join("\n").slice(-1200);
-    const ctrl2 = (curCtrl = new AbortController()), id2 = setTimeout(() => ctrl2.abort(), 25000);
-    const r2 = await fetch("https://text.pollinations.ai/" + encodeURIComponent(conv) + "?model=openai&system=" + encodeURIComponent(sys), { signal: ctrl2.signal });
-    clearTimeout(id2);
-    const t2 = cleanAd((await r2.text()).trim());
-    if (r2.ok && t2) { usedOnline = true; return t2; }
-    throw new Error("http " + r2.status);
-  } catch (e) { last = e; }
   throw last || new Error("sin respuesta");
 }
 const getM = () => { try { return JSON.parse(localStorage.getItem("dn-mem") || "[]"); } catch (e) { return []; } };
@@ -535,7 +539,7 @@ $("ncgo").onclick = async () => {
   let acc = "", cut = false;
   const go = async () => {
     acc = ""; cut = false;
-    if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { if (stopped) return; if (!engine) throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); o.textContent = "El modo online falló. Uso el modo local…"; } }
+    if (ONL()) { try { o.textContent = "Creando código online…"; acc = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: t }], 3500, ["openai"]); o.textContent = acc; return; } catch (eo) { if (stopped) return; throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); o.textContent = "El modo online falló. Uso el modo local…"; } }
     await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: CODE_SYS }, { role: "user", content: t }], stream: true, temperature: 0.2, max_tokens: 1600, frequency_penalty: 0.5, stop: ["</html>"] });
     for await (const ch of r) {
@@ -566,7 +570,7 @@ $("trgo").onclick = async () => {
   busy = true; trRun = true; stopped = false; genOn(); $("trgo").textContent = "■ Cancelar"; const o = $("trout"); o.textContent = "…";
   const sysT = "Eres un traductor profesional. Traduce el texto del usuario a " + $("trlang").value + ". Responde SOLO con la traducción, sin explicaciones, sin comillas y sin añadir nada.";
   const go = async () => {
-    if (ONL()) { try { o.textContent = await onlineChat([{ role: "system", content: sysT }, { role: "user", content: t }], 700, ["openai"]); return; } catch (eo) { if (stopped) return; if (!engine) throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); } }
+    if (ONL()) { try { o.textContent = await onlineChat([{ role: "system", content: sysT }, { role: "user", content: t }], 700, ["openai"]); return; } catch (eo) { if (stopped) return; throw fe("El servicio online no respondió. Inténtalo otra vez, o desactiva el modo online en ☰."); } }
     await ensureEngine(p => { o.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
     const r = await engine.chat.completions.create({ messages: [{ role: "system", content: sysT }, { role: "user", content: t }], stream: true, temperature: 0.1, max_tokens: 700 });
     let acc = ""; for await (const ch of r) { acc += ch.choices[0]?.delta?.content || ""; o.textContent = acc; }
@@ -655,8 +659,8 @@ f.onsubmit = async e => {
     for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
     msgs = keep;
     if (ONL() && !lite) {
-      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs]); md(out, acc); return; }
-      catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } if (!engine) throw fe("El servicio online no respondió (" + String((eo && eo.message) || eo).slice(0, 50) + "). Inténtalo otra vez, o desactiva el modo online en ☰ para usar la IA del móvil."); out.textContent = "El modo online falló. Uso el modo local…"; }
+      try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs], 700, undefined, a => { out.textContent = "⏳ El servicio online está ocupado, reintentando (" + a + "/3)…"; }); md(out, acc); return; }
+      catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } throw fe("El servicio online no respondió (" + String((eo && eo.message) || eo).slice(0, 50) + "). Espera unos segundos y vuelve a intentarlo."); out.textContent = "El modo online falló. Uso el modo local…"; }
     }
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
     if (pic && cur !== VISION) throw fe("Sin conexión no puedo ver fotos con la IA local sin bajar el modelo grande (4 GB). Activa el modo online o inténtalo con conexión.");
@@ -721,6 +725,7 @@ $("menu").onclick = () => { save(); drawer.style.display = "block"; $("dsearch")
 $("dclose").onclick = closeDrawer; $("dback").onclick = closeDrawer;
 $("onl").onchange = () => {
   if ($("onl").checked && !confirm("El modo online hace a DarkNova mucho más lista, pero tus mensajes se envían a un servicio de IA gratuito en internet. ¿Activarlo?")) { $("onl").checked = false; return; }
+  if (!$("onl").checked && !confirm("El modo local usa mucha memoria y en algunos iPhones cierra la app. ¿Seguro que quieres desactivar el modo online?")) { $("onl").checked = true; return; }
   setOnline($("onl").checked);
 };
 paintSub();
