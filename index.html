@@ -127,7 +127,7 @@ form .go{padding:10px 18px;font-size:16px}
 const LIBS = ["https://esm.run/@mlc-ai/web-llm", "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm"];
 async function loadLib() {
   let last;
-  for (const u of LIBS) { try { return await import(u); } catch (e) { last = e; } }
+  for (const u of LIBS) { try { return await Promise.race([import(u), new Promise((_, rej) => setTimeout(() => rej(new Error("tiempo agotado cargando la librería")), 15000))]); } catch (e) { last = e; } }
   throw last;
 }
 
@@ -249,7 +249,6 @@ const startApp = async () => {
   }
 };
 $("start").onclick = startApp;
-$("start").style.display = "none"; startApp();
 
 let img = null;
 const note = $("note");
@@ -277,7 +276,7 @@ $("cam").onclick = () => { if (!busy) $("file").click(); };
 $("file").onchange = async e => {
   const file = e.target.files[0]; e.target.value = ""; if (!file || busy) return;
   try { img = await shrink(file); } catch (err) { note.style.display = "flex"; note.textContent = "No pude leer la foto."; return; }
-  if (cur === VISION) { preview(); return; }
+  if (cur === VISION || ONL()) { preview(); return; }
   if (!confirm("Para ver fotos, DarkNova descarga un modelo extra de unos 4 GB (solo la primera vez). Puede fallar en iPhones con poca memoria. ¿Continuar?")) { img = null; return; }
   busy = true; note.style.display = "flex"; note.textContent = "Descargando modelo de fotos…";
   try { await engine.unload(); } catch (e2) {}
@@ -404,6 +403,8 @@ function sysExtra() {
 }
 let curCtrl = null, stopped = false, usedOnline = false;
 function stopGen() { stopped = true; try { engine.interruptGenerate(); } catch (e) {} try { if (curCtrl) curCtrl.abort(); } catch (e) {} }
+function loops(t) { if (t.length < 120) return false; const tail = t.slice(-40); let n = 0, i = -1; while ((i = t.indexOf(tail, i + 1)) !== -1) n++; return n >= 3; }
+function trimLoop(t) { const tail = t.slice(-40); return t.slice(0, t.indexOf(tail) + tail.length).trim(); }
 const mkBtn = (t, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = fn; return b; };
 function md(el, text) {
   el.textContent = ""; el.dataset.raw = text;
@@ -500,8 +501,21 @@ function closeCode(c) {
   if (!/<\/html>/i.test(o)) o += "\n</html>";
   return o;
 }
-const GUARD = '<script>window.onerror=function(m,s,l){var p=document.createElement("pre");p.style.cssText="color:#c00;font:12px monospace;white-space:pre-wrap;padding:8px";p.textContent="Error en el código: "+m+" (línea "+l+"). Prueba a pulsar Crear código otra vez o pide algo más sencillo.";document.body.appendChild(p)}<\/script>';
+const GUARD = '<script>window.onerror=function(m,s,l){var p=document.createElement("pre");p.style.cssText="color:#c00;font:12px monospace;white-space:pre-wrap;padding:8px";p.textContent="Error en el código: "+m+" (línea "+l+")";(document.body||document.documentElement).appendChild(p);parent.postMessage({dnErr:m+" (línea "+l+")"},"*")};setTimeout(function(){var b=document.body;if(!b||(!b.innerText.trim()&&!b.querySelector("canvas,button,input,svg,img,select,textarea,div")))parent.postMessage({dnErr:"La página sale en blanco: no dibuja nada"},"*")},1500)<\/script>';
 $("ncrun").onclick = () => { const fr = $("ncframe"); fr.style.display = "block"; fr.srcdoc = GUARD + closeCode(ncCode); fr.scrollIntoView({ behavior: "smooth" }); };
+let ncTries = 9, ncPrompt = "";
+async function autoFix(err) {
+  if (!ONL() || ncTries >= 2 || busy || !ncCode) return;
+  ncTries++; busy = true; const o = $("ncout"); o.textContent = "🛠️ Encontré un fallo (" + err.slice(0, 80) + "). Lo arreglo automáticamente…";
+  try {
+    const fixed = await onlineChat([{ role: "system", content: CODE_SYS.replace("máximo 50 líneas", "máximo 200 líneas") }, { role: "user", content: ncPrompt }, { role: "assistant", content: "```html\n" + ncCode + "\n```" }, { role: "user", content: "Ese código falla con este error: " + err + ". Devuelve el archivo HTML completo corregido, que funcione sin errores." }], 3500, ["openai"]);
+    const m = fixed.match(/```(?:html)?\s*\n([\s\S]*?)(?:```|$)/); let c = (m ? m[1] : fixed).trim();
+    const ix = c.search(/<\/html>/i); if (ix > -1) c = c.slice(0, ix) + "</html>";
+    if (c.length > 50) { ncCode = c; o.textContent = ncCode; $("ncrun").click(); }
+  } catch (e) { o.textContent = ncCode + "\n\n<!-- No pude arreglarlo solo. Pulsa Crear código otra vez. -->"; }
+  busy = false;
+}
+window.addEventListener("message", ev => { if (ev.source === $("ncframe").contentWindow && ev.data && ev.data.dnErr) autoFix(String(ev.data.dnErr)); });
 let ncRun = false, trRun = false;
 const isGpuErr = e => /dispos|GPU|device|lost|adapter|WebGPU/i.test(String((e && e.message) || e));
 $("ncgo").onclick = async () => {
@@ -509,10 +523,10 @@ $("ncgo").onclick = async () => {
   const t = $("ncin").value.trim(); if (!t || busy || (!engine && !ONL())) return;
   const key = pick(t);
   if (key) {
-    ncCode = TPL[key](); const o2 = $("ncout"); o2.style.display = "block"; o2.textContent = ncCode;
+    ncTries = 9; ncCode = TPL[key](); const o2 = $("ncout"); o2.style.display = "block"; o2.textContent = ncCode;
     $("ncbtns").style.display = "flex"; $("ncrun").click(); return;
   }
-  busy = true; ncRun = true; stopped = false; genOn(); $("ncgo").textContent = "■ Cancelar"; ncCode = "";
+  ncPrompt = t; ncTries = 0; busy = true; ncRun = true; stopped = false; genOn(); $("ncgo").textContent = "■ Cancelar"; ncCode = "";
   const o = $("ncout"); o.style.display = "block"; o.textContent = "Creando código…";
   $("ncbtns").style.display = "none"; $("ncframe").style.display = "none";
   let acc = "", cut = false;
@@ -637,15 +651,16 @@ f.onsubmit = async e => {
     let used = 0; const keep = [];
     for (let i = msgs.length - 1; i >= 0; i--) { used += String(msgs[i].content).length; if (used > 2600 && keep.length) break; keep.unshift(msgs[i]); }
     msgs = keep;
-    if (ONL() && !pic && !lite) {
+    if (ONL() && !lite) {
       try { acc = await onlineChat([{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx ? CTXH + ctx.slice(0, 1800) : "") }, ...msgs]); md(out, acc); return; }
       catch (eo) { if (stopped) { acc = acc || "⏹ Detenido."; md(out, acc); return; } out.textContent = "El modo online falló (" + String((eo && eo.message) || eo).slice(0, 60) + "). Uso el modo local…"; }
     }
     if (pic) msgs[msgs.length - 1] = { role: "user", content: [{ type: "text", text: t || "Describe esta foto." }, { type: "image_url", image_url: { url: pic } }] };
+    if (pic && cur !== VISION) throw new Error("Sin conexión no puedo ver fotos con la IA local sin bajar el modelo grande (4 GB). Activa el modo online o inténtalo con conexión.");
     await ensureEngine(p => { out.textContent = "Cargando la IA local… " + Math.round(p.progress * 100) + "%"; });
-    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400 });
+    const s = await engine.chat.completions.create({ messages: [{ role: "system", content: SYSTEM + sysExtra() + lessonsText(shown) + (corrNow ? corrHint : "") + (ctx && !lite ? CTXH + ctx.slice(0, 900) : "") }, ...msgs], stream: true, temperature: 0.3, max_tokens: 400, frequency_penalty: 0.4, presence_penalty: 0.1 });
     for await (const ch of s) {
-      acc += ch.choices[0]?.delta?.content || ""; md(out, acc); chat.scrollTop = chat.scrollHeight;
+      acc += ch.choices[0]?.delta?.content || ""; if (loops(acc)) { try { engine.interruptGenerate(); } catch (e) {} acc = trimLoop(acc); md(out, acc); break; } md(out, acc); chat.scrollTop = chat.scrollHeight;
     }
   };
   const SORRY = "Uy, no he sabido responder a eso 😅. ¿Me lo preguntas de otra forma o con menos palabras?";
@@ -725,6 +740,9 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } });
+window.addEventListener("unhandledrejection", e => { if (document.getElementById("setup")) st.textContent = "Error: " + String((e.reason && e.reason.message) || e.reason).slice(0, 140); });
+$("start").style.display = "none"; startApp();
+setTimeout(() => { if (document.getElementById("setup")) st.textContent += " (Tarda más de lo normal. Si no avanza, cierra la app y ábrela otra vez.)"; }, 25000);
 </script>
 </body>
 </html>
